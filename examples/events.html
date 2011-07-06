@@ -1,0 +1,37 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+		"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+	<title>View Test</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<script type="text/javascript" src="http://code.jquery.com/jquery-1.5.js"></script>
+	<script type="text/javascript" src="../events.js"></script>
+</head>
+<body>
+	<script type="text/javascript">
+		function getLogger(msg) {
+			return (getLogger[msg] = function() {
+				console.debug(msg);
+			})
+		}
+
+		function logArgs() {
+		  console.debug('this = ', this);
+		  console.debug('args = ', arguments);
+		}
+
+		function getArgsLogger() {
+			return (getLogger[msg] = function() {
+				console.debug(msg);
+			})
+		}
+
+		var e = new Events({
+			click: getLogger('click'),
+			move: [getLogger('move1'), getLogger('move2')]
+											 });
+		e.addEvents({'debug': [logArgs, logArgs]}).fireEvent('debug', [1], window);
+		console.debug(e);
+	</script>
+</body>
+</html>

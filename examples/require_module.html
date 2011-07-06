@@ -1,0 +1,48 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+		"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+	<title>Require Test</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<script type="text/javascript" src="../qb/core.js"></script>
+</head>
+<body>
+
+	<div id="itemTmpl" class="hidden">
+		<div class="icon">
+			<img src="" alt="">
+		</div>
+		<div class="info">
+			<span class="name">Item</span>
+			<span class="descr">Description</span>
+		</div>
+		<span class="price-usa">$100</span>
+		<span class="price-rus">3000 руб</span>
+	</div>
+
+	<script type="text/javascript">
+		qb.require('dom.View', function(View) {
+			var $item = new View({
+				holder: '{*} #itemTmpl',
+				icon: '{iconWrap} > img',
+				iconWrap: '{>}.icon',
+				data: {
+					holder: '{>} .info',
+					name: '{parent.data|>} .name',
+					description: '.descr',
+					prices: {
+						usa: '{root|>} .price-usa',
+						rus: '{root} .price-rus'
+					}
+				}
+			}).useAsTemplate('hidden');
+
+			for( var i = 0, len = 100; i < len; i++ ) {
+				$item.cloneView().$holder.appendTo(document.body);
+			}
+
+			console.debug($item);
+		});
+	</script>
+</body>
+</html>
