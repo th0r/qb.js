@@ -6,11 +6,16 @@
     callback.apply(qb, DEFAULT_ARGS);
   }
 
-  /*----------   Namespace (утилита для создания областей видимости)   ----------*/
-  function ns(path/*, parent=qb, finalObj={}*/) {
+  /**
+   * Namespace - функция для создания областей видимости
+   * @param path {String} Строка вида "ns.ns1.ns2"
+   * @param [parent=qb] {Object} Опционально. Объект, в котором будут создаваться области видимости.
+   * @param [finalObj={}] {Object} Опционально. Объект, который будет записан на место последней области видимости.
+   */
+  function ns(path, parent, finalObj) {
     var parts = path.split('.'),
-        ns = arguments[1] || qb,
-        finalObj = arguments[2];
+        ns = parent || qb;
+    finalObj = finalObj || {};
     for (var i = 0, len = parts.length - 1; i < len; i++) {
       var part = parts[i];
       if (part) {
@@ -23,6 +28,12 @@
   }
 
   /*----------   Основные утилиты   ----------*/
+
+  /**
+   * Декоратор, который первый аргумент сгенеренный функции превращает в this декорируемой.
+   * Пример: var slice = Array.prototype.slice.thisToArg();
+   *         slice([1, 2, 3], 1, 2) эквивалентно Array.prototype.slice.call([1, 2, 3], 1, 2)
+   */
   Function.prototype.thisToArg = function() {
     var fn = this;
     return function() {
