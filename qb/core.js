@@ -51,6 +51,7 @@
         }
       }
     }
+    return to;
   }
 
   function fromProtoToStatic(constructor, methods) {
