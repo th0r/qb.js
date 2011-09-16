@@ -6,7 +6,8 @@ qb.module('Class', function(qb, document, window, undefined) {
     var Name = info.Name,
         Extends = info.Extends,
         Implements = Array.from(info.Implements),
-        Static = info.Static;
+        Static = info.Static,
+        init = info.init;
 
     var constructor = function() {
       var self = this;
@@ -20,8 +21,8 @@ qb.module('Class', function(qb, document, window, undefined) {
       //}
 
       // Вызов собственного конструктора
-      if (self.init) {
-        self.init.apply(self, arguments);
+      if (init) {
+        init.apply(self, arguments);
       }
     };
 
@@ -45,12 +46,21 @@ qb.module('Class', function(qb, document, window, undefined) {
     delete info.Extends;
     delete info.Implements;
     delete info.Static;
+    delete info.init;
     qb.merge(proto, info, true);
     proto.constructor = constructor;
     // Наследование (часть 2)
     if (Extends) {
-      proto.$parent = Extends;
-      proto.$parentProto = Extends.prototype;
+      // Вешаем имена на методы, чтобы можно было использовать метод super
+      qb.each(info, function(attr, name) {
+        if (Function.is(attr)) {
+          attr.$name = name;
+        }
+      });
+      proto.$super = function() {
+        var func = Extends.prototype[arguments.callee.caller.$name];
+        return arguments.length ? func.apply(this, arguments) : func;
+      }
     }
     // Название класса
     if (Name) {
