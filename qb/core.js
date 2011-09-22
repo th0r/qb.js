@@ -87,7 +87,7 @@
           prependedArgs = arguments.length > 1 ? Array.slice(arguments, 1) : null;
       return function() {
         var args = Array.slice(arguments);
-        fn.apply(thisObj, prependedArgs ? prependedArgs.concat(args) : args);
+        return fn.apply(thisObj, prependedArgs ? prependedArgs.concat(args) : args);
       }
     }
   }, false, true);
@@ -95,10 +95,21 @@
   /*----------   Расширение Object   ----------*/
   merge(Object, {
     isObject: function(obj) {
-      return typeof obj === 'object' && obj !== null;
+      return typeof obj === 'object' && obj !== null && !Array.is(obj);
     },
     isIteratable: function(obj) {
       return obj && obj.length != null && typeof obj !== 'string' && !Function.is(obj);
+    },
+    keys: function(obj) {
+      if (Object.is(obj)) {
+        var keys = [];
+        for (var key in obj) {
+          if (obj.hasOwnProperty(key)) {
+            keys.push(key);
+          }
+        }
+      }
+      return keys || [];
     }
   }, false, true);
   Object.is = Object.isObject;
@@ -215,6 +226,11 @@
         }
       }
     },
+    clean: function() {
+      return this.filter(function(item) {
+        return item || item === false;
+      });
+    },
     append: function(array) {
       for (var i = 0, len = array.length; i < len; i++) {
         this.push(array[i]);
@@ -237,8 +253,21 @@
     contains: Array.prototype.contains,
     format: function(replaceObj) {
       return this.replace(reFormatReplace, function(fullExpr, expr) {
-        return replaceObj.hasOwnProperty(expr) ? replaceObj[expr] : '';
+        if (expr) {
+          return replaceObj.hasOwnProperty(expr) ? replaceObj[expr] : '';
+        } else {
+          return replaceObj;
+        }
       });
+    },
+    startsWith: function(str) {
+      return this.substr(0, str.length) === str;
+    },
+    endsWith: function(str) {
+      return this.substr(-str.length) === str;
+    },
+    escapeRegexp: function() {
+      return this.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
     }
   }, false, true);
 
@@ -270,7 +299,275 @@
     }
   }
 
-  // Загрузчик модулей
+  /*----------   Реализация Class   ----------*/
+  function Empty() {}
+
+  function Class(info) {
+    var Name = info.Name,
+        Extends = info.Extends,
+        Implements = Array.from(info.Implements),
+        Static = info.Static,
+        init = info.init;
+
+    var constructor = function() {
+      var self = this;
+      // Вызов конструкторов примесей (для добавления необходимых атрибутов создаваемому объекту)
+      // Вызываем даже в вызове конструктора примесей, т.е. если примесь имплементит другую примесь,
+      // будет вызван конструктор этой другой примеси TODO: 1) правильно ли? (связано с 2)
+      //if( self instanceof constructor ) {
+      Implements.forEach(function(Mixin) {
+        Mixin.call(this);
+      }, self);
+      //}
+
+      // Вызов собственного конструктора
+      if (init) {
+        init.apply(self, arguments);
+      }
+    };
+
+    // Статичные атрибуты
+    if (Static) {
+      merge(constructor, Static, true);
+    }
+    // Наследование (часть 1)
+    var proto = constructor.prototype;
+    if (Extends) {
+      Empty.prototype = Extends.prototype;
+      proto = constructor.prototype = new Empty();
+    }
+    // Примеси
+    Implements.forEach(function(Mixin) {
+      // Мержим всю ветку прототипов, а не конкретный прототип примеси TODO: 2) правильно ли?
+      merge(this, Mixin.prototype, false/*true*/, true);
+    }, proto);
+    // Собственные атрибуты
+    delete info.Name;
+    delete info.Extends;
+    delete info.Implements;
+    delete info.Static;
+    delete info.init;
+    merge(proto, info, true);
+    proto.constructor = constructor;
+    // Наследование (часть 2)
+    if (Extends) {
+      // Вешаем имена на методы, чтобы можно было использовать метод super
+      each(info, function(attr, name) {
+        if (Function.is(attr)) {
+          attr.$name = name;
+        }
+      });
+      proto.$super = function() {
+        var func = Extends.prototype[arguments.callee.caller.$name];
+        return arguments.length ? func.apply(this, arguments) : func;
+      }
+    }
+    // Название класса
+    if (Name) {
+      constructor.toString = Function.from(Name);
+    }
+
+    return constructor;
+  }
+
+  /*----------   Новый загрузчик   ------------*/
+  /**
+   *    1) Загрузка скриптов из root-js директории (расширение ".js" можно опускать - если его нет, оно добавится автоматически):
+   *      'jquery/widgets: widget1, widget2, widget3; qb/classes: Collection, Events, Lazy;'
+   *    2) Загрузка скриптов не из-под root-js или извне.
+   *       В данном случае обработка урлов не проходит - в них не ищутся шорткаты, пакеты (см. ниже) и не добавляется расширение ".js"
+   *      'http://domain/a.js; https://domain/b.js; www.domain.com/c.js; //domain.com/d.js; /static/other-js/c.js'
+   * TODO: 3) Загрузка приоритетных скриптов:
+   *       Такие скрипты будут загружены первыми из списка.
+   *       Полезно, например, при загрузке jquery и плагинов к нему (jquery должен быть загружен перед плагинами).
+   *       Для этого перед названием скрипта нужно поставить знак "!"
+   *      '!jquery; jquery/plugins: jquery.form; jquery.ui
+   *
+   *    Также существуют шоткаты и пакеты.
+   *    Шоткат - сокращение какой-нибудь части запроса, например для шотката '$ = jquery':
+   *    '!$; $/plugins: $.form, $.ui' => '!jquery; jquery/plugins: jquery.form, jquery.ui'
+   *    Последовательность символов является шоткатом, если она окружена спец-символами [!,;:./] или началом/концом строки
+   *    Шоткатом может быть любая строка - она будет подставлена в запрос без преобразований.
+   *
+   *    Пакет - короткое название для нескольких скриптов, например 'qb.ClassesFull' = 'qb/classes: Collection, Events, Lazy, Sync'
+   *    Пакеты определяются после подставления всех шоткатов.
+   *    Последовательность символов является пакетом, если она окружена символами [;,] или началом/концом строки
+   *
+   */
+
+  var HEAD_ELEM = document.getElementsByTagName('head')[0];
+
+  var Shortcuts = new Class({
+    Name: 'Shortcuts',
+
+    init: function(shortcuts) {
+      this.shortcuts = Object.is(shortcuts) ? shortcuts : {};
+      this._generateRegexp();
+    },
+    add: function(shortcut, value) {
+      this.shortcuts[shortcut] = value;
+      this._generateRegexp();
+    },
+    _generateRegexp: function() {
+      var shortcuts = Object.keys(this.shortcuts).map(function(shortcut) {
+        return shortcut.escapeRegexp();
+      }).join('|');
+      if (shortcuts) {
+        var regexp = '(^|[{edges}])({shortcuts})(?=[{edges}]|$)'.format({
+          edges: '!,:./',
+          shortcuts: shortcuts
+        });
+      }
+      this.regexp = regexp ? new RegExp(regexp, 'g') : null;
+    },
+    replaceIn: function(str) {
+      var shortcuts = this.shortcuts;
+      return this.regexp ? str.replace(this.regexp, function(_, left, shortcut) {
+        return left + shortcuts[shortcut];
+      }) : str;
+    }
+  });
+
+  var Script = new Class({
+    Name: Script,
+    Static: {
+      UNLOADED: 0,
+      LOADING: 1,
+      LOADED: 2
+    },
+
+    init: function(url) {
+      this.src = url;
+      this.elem = null;
+      this.status = Script.UNLOADED;
+    },
+    load: function() {
+      if (this.status === Script.UNLOADED) {
+        this.status = Script.LOADING;
+        var elem = this.elem = document.createElement('script');
+        this._bindLoadHandler();
+        elem.src = this.src;
+        HEAD_ELEM.appendChild(elem);
+      }
+    },
+    _bindLoadHandler: function() {
+      var self = this,
+          script = this.elem;
+      var handler = function() {
+        console.log( '"{}": onload; arguments:'.format(self.src) );
+        console.log(arguments);
+        this.onreadystatechange = this.onload = this.onerror = null;
+        self.status = Script.LOADED;
+        console.log('Скрипт {} загружен'.format(self.src), this);
+      };
+      script.onreadystatechange = function() {
+        console.log( '"{0}": readyState = "{1}"'.format([self.src, this.readyState]) );
+        if (this.readyState == 'loaded' || this.readyState == 'complete') {
+          handler.call(this);
+        }
+      };
+      script.onload = handler;
+      script.onerror = function(message, file, line) {
+        console.log( 'Не удалось загрузить скрипт "{1}":\n  Ошибка на строке {2}: "{0}"'.format([message, file, line]) );
+      }
+    }
+  });
+
+  var Loader = new Class({
+    Name: 'Loader',
+
+    init: function(rootUrl) {
+      this.rootUrl = rootUrl;
+      this.scripts = {};
+    },
+    require: function(query/*, exports*/, callback) {
+      var scripts = this.scripts,
+          urls = this._parseQuery(query);
+      urls.forEach(function(url) {
+        if (!scripts[url]) {
+          var script = scripts[url] = new Script(url);
+          script.load();
+        }
+      });
+    },
+    _parseQuery: function(query) {
+      var self = this;
+      if (typeof query === 'string') {
+        var parts = this._getQueryParts(query);
+      } else {
+        parts = query;
+      }
+      var urls = {};
+      parts.forEach(function(part) {
+        if (part) {
+          part = self._normalizePart(part);
+          // Начинается с "/", "http://" или "https://"
+          if ( /^(\/|https?:\/\/)/i.test(part) ) {
+            urls[part] = true;
+          } else {
+            part = shortcuts.replaceIn(part);
+            qb.merge(urls, self._parsePart(part));
+          }
+        }
+      });
+      urls = Object.keys(urls);
+      return urls;
+    },
+    _getQueryParts: function(query) {
+      return query.replace(/\s/g, '').split(';');
+    },
+    _normalizePart: function(part) {
+      if ( part.startsWith('//') ) {
+        part = 'http:' + part;
+      } else if ( part.startsWith('www.') ) {
+        part = 'http://' + part;
+      }
+      return part;
+    },
+    _parsePart: function(part) {
+      var chunks = part.split(':').slice(0, 2),
+          base = (chunks.length > 1) ? chunks[0] + '/' : '',
+          childs = chunks[1] || chunks[0],
+          scripts = {},
+          normalizeUrl = this._normalizeUrl.bind(this);
+      childs.split(',').forEach(function(child) {
+        var script = normalizeUrl(base + child);
+        scripts[script] = true;
+      });
+      return scripts;
+    },
+    _normalizeUrl: function(url) {
+      if (!url.endsWith('.js')) {
+        url += '.js';
+      }
+      url = this.rootUrl + url;
+      return url;
+    }
+  });
+
+  var shortcuts = new Shortcuts({
+        '$': 'jquery',
+        'cls': 'qb/classes'
+      });
+
+  var loader = window.loader = new Loader('/static/js/');
+
+  // Тесты
+  var test_queries = [
+    'jquery',
+    '$',
+    '   $;  ',
+    '$; $: $.form, $.widget; qb/classes: Collection; cls: Events;',
+    'http://cls.com; https://www.cls.$.com; //cls.com; www.cls.com; //www.cls.com; /static/other_js/lib'
+  ];
+
+  test_queries.forEach(function(query) {
+    loader._parseQuery(query);
+  });
+
+  loader.require('$');
+
+  /*----------   Загрузчик модулей   ----------*/
   var UNLOADED = 0,
       LOADING = 1,
       LOADED = 2,
@@ -287,7 +584,7 @@
       if (this.state === UNLOADED) {
         this.state = LOADING;
         var script = document.createElement('script');
-        script.src = qb.modulesRoot + this.path.split('.').join('/') + '.js';
+        script.src = qb.jsRoot + this.path.split('.').join('/') + '.js';
         HEAD_ELEM.appendChild(script);
       }
     },
@@ -343,7 +640,8 @@
 
   var Loader = {
     storage: {
-      core: new Module('core', qb)
+      'qb.core': new Module('qb.core', qb),
+      'qb.Class': new Module('qb.Class', Class)
     },
     handlers: [],
     packages: {},
@@ -459,9 +757,9 @@
     }
   };
 
-  // Определяем root-директорию библиотеки (TODO: подумать над безопасностью)
+  // Определяем директорию со скриптами
   var scripts = document.getElementsByTagName('script'),
-      rootRegEx = /(.*?qb\/)core\.js$/,
+      rootRegEx = /(.*?)qb\/core\.js$/,
       root = null;
   for (var i = 0, len = scripts.length; i < len; i++) {
     if (root = rootRegEx.exec(scripts[i].getAttribute('src'))) {
@@ -475,12 +773,12 @@
 
   /*----------   Проброс в глобальную область   ----------*/
   merge(qb, {
-    modulesRoot: root || '/js/qb/',
+    jsRoot: root || '/js/',
     loader: Loader,
     ns: ns,
-    // Other tools
     merge: merge,
-    each: each
+    each: each,
+    Class: Class
   });
 
   // Добавляем ярлыки в qb для работы с модулями
