@@ -1,6 +1,6 @@
-qb.module('classes.Events', 'Class', function(Class, qb, document, window, undefined) {
+(function(Class, each, qb, undefined) {
 
-  var Events = new Class({
+  qb.Events = new Class({
 
     Name: 'Events',
     init: function(/*events=null*/) {
@@ -19,7 +19,7 @@ qb.module('classes.Events', 'Class', function(Class, qb, document, window, undef
     addEvents: function(eventsObj) {
       if (eventsObj) {
         var events = this.$events;
-        qb.each(eventsObj, function(val, name) {
+        each(eventsObj, function(val, name) {
           events[name] = events[name] || [];
           events[name][ Array.is(val) ? 'append' : 'push' ](val);
         });
@@ -55,6 +55,4 @@ qb.module('classes.Events', 'Class', function(Class, qb, document, window, undef
     }
   });
 
-  return Events;
-
-});
+})(qb.Class, qb.each, qb);

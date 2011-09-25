@@ -1,10 +1,6 @@
 (function(window, document, undefined) {
 
-  var DEFAULT_ARGS = [qb, document, window];
-
-  function qb(callback) {
-    callback.apply(qb, DEFAULT_ARGS);
-  }
+  var qb = {};
 
   /**
    * Namespace - функция для создания областей видимости
@@ -15,7 +11,6 @@
   function ns(path, parent, finalObj) {
     var parts = path.split('.'),
         ns = parent || qb;
-    finalObj = finalObj || {};
     for (var i = 0, len = parts.length - 1; i < len; i++) {
       var part = parts[i];
       if (part) {
@@ -34,10 +29,11 @@
    * Пример: var slice = Array.prototype.slice.thisToArg();
    *         slice([1, 2, 3], 1, 2) эквивалентно Array.prototype.slice.call([1, 2, 3], 1, 2)
    */
+  var slice = Array.prototype.slice;
   Function.prototype.thisToArg = function() {
     var fn = this;
     return function() {
-      return fn.apply(arguments[0], Array.prototype.slice.call(arguments, 1));
+      return fn.apply(arguments[0], slice.call(arguments, 1));
     }
   };
 
@@ -400,12 +396,15 @@
   var Shortcuts = new Class({
     Name: 'Shortcuts',
 
-    init: function(shortcuts) {
-      this.shortcuts = Object.is(shortcuts) ? shortcuts : {};
-      this._generateRegexp();
+    init: function(edgeChars) {
+      this.shortcuts = {};
+      this.edgeChars = edgeChars;
     },
-    add: function(shortcut, value) {
-      this.shortcuts[shortcut] = value;
+    add: function(shortcuts) {
+      var currentShortcuts = this.shortcuts;
+      each(shortcuts, function(value, shortcut) {
+        currentShortcuts[shortcut] = normalizeQuery(value);
+      });
       this._generateRegexp();
     },
     _generateRegexp: function() {
@@ -414,7 +413,7 @@
       }).join('|');
       if (shortcuts) {
         var regexp = '(^|[{edges}])({shortcuts})(?=[{edges}]|$)'.format({
-          edges: '!,:./',
+          edges: this.edgeChars,
           shortcuts: shortcuts
         });
       }
@@ -433,13 +432,16 @@
     Static: {
       UNLOADED: 0,
       LOADING: 1,
-      LOADED: 2
+      LOADED: 2,
+      LOAD_ERROR: 3
     },
 
     init: function(url) {
       this.src = url;
       this.elem = null;
       this.status = Script.UNLOADED;
+      this.callbacks = [];
+      this.loaded = null;
     },
     load: function() {
       if (this.status === Script.UNLOADED) {
@@ -450,26 +452,129 @@
         HEAD_ELEM.appendChild(elem);
       }
     },
+    onload: function(callback) {
+      var status = this.status;
+      if (status === Script.LOADED) {
+        this._executeCallback(callback);
+      } else {
+        this.callbacks.push(callback);
+      }
+    },
+    defer: function() {
+      var elem = this.elem;
+      elem.onreadystatechange = elem.onload = null;
+    },
+    _executeCallback: function(callback) {
+      callback.call(this, this);
+    },
     _bindLoadHandler: function() {
       var self = this,
-          script = this.elem;
-      var handler = function() {
-        console.log( '"{}": onload; arguments:'.format(self.src) );
-        console.log(arguments);
-        this.onreadystatechange = this.onload = this.onerror = null;
-        self.status = Script.LOADED;
-        console.log('Скрипт {} загружен'.format(self.src), this);
-      };
-      script.onreadystatechange = function() {
+          elem = this.elem,
+          loaded = this.loaded = function() {
+            elem.onreadystatechange = elem.onload = elem.onerror = null;
+            self.status = Script.LOADED;
+            var callbacks = self.callbacks, callback;
+            while (callback = callbacks.shift()) {
+              self._executeCallback(callback);
+            }
+          };
+      elem.onreadystatechange = function() {
         console.log( '"{0}": readyState = "{1}"'.format([self.src, this.readyState]) );
         if (this.readyState == 'loaded' || this.readyState == 'complete') {
-          handler.call(this);
+          loaded();
         }
       };
-      script.onload = handler;
-      script.onerror = function(message, file, line) {
-        console.log( 'Не удалось загрузить скрипт "{1}":\n  Ошибка на строке {2}: "{0}"'.format([message, file, line]) );
+      elem.onload = loaded;
+      elem.onerror = function(message, file, line) {
+        self.status = Script.LOAD_ERROR;
+        throw 'Не удалось загрузить скрипт "{1}":\n  Ошибка на строке {2}: "{0}"'.format([message, file, line]);
       }
+    },
+    toString: function() {
+      return 'Script [{}]'.format(this.src);
+    }
+  });
+
+  /**
+   * Нормализует строку запроса (удаляет все пробельные символы)
+   * @param {String} query  Строка запроса
+   * @returns {String}
+   */
+  function normalizeQuery(query) {
+    return query.replace(/\s/g, '');
+  }
+
+  /**
+   * Разделяет строку запроса на части и удаляет из них пустые
+   * @param {String} query  Строка запроса
+   * @returns {Array}
+   */
+  function splitQuery(query) {
+    return query.split(';').clean();
+  }
+
+  /**
+   * Преобразует часть запроса вида "qb/classes:Sync,Events" в массив ["qb/classes/Sync", "qb/classes/Events"]
+   * @param {String} part  Часть запроса
+   * @param {String} joiner  Строка, которая будет соединять части слева и справа от ":"
+   * @returns {Array}
+   */
+  function splitPart(part, joiner) {
+    var chunks = part.split(':').slice(0, 2),
+        base = (chunks.length > 1) ? chunks[0] + joiner : '',
+        childs = (chunks[1] || chunks[0]).split(',');
+    return base ? childs.map(function(child) {
+      return base + child;
+    }) : childs;
+  }
+
+  var Handler = new Class({
+    Name: 'Handler',
+
+    init: function(loader, scripts, callback, exports) {
+      var self = this,
+          count = scripts.length;
+      this.loader = loader;
+      this.callback = callback;
+      this.scripts = scripts;
+      this.exports = exports;
+      if (count) {
+        var handler = function() {
+            if (--count === 0) {
+              console.log( 'Callback for scripts', scripts, 'executed' );
+              self._executeCallback();
+            }
+          };
+
+        scripts.forEach(function(script) {
+          script.onload(handler);
+        });
+      } else {
+        this._executeCallback();
+      }
+    },
+    _parseExports: function() {
+      var exports = this.exports;
+      if (exports) {
+        if (typeof exports === 'string') {
+          exports = this.loader.exportShortcuts.replaceIn( normalizeQuery(exports) );
+          var result = [];
+          splitQuery(exports).forEach(function(part) {
+            splitPart(part, '.').forEach(function(_export) {
+              this.push( ns(_export, window) );
+            }, result);
+          });
+          return result;
+        } else {
+          return Array.is(exports) ? exports : [exports];
+        }
+      } else {
+        return [];
+      }
+    },
+    _executeCallback: function() {
+      var args = this._parseExports();
+      this.callback.apply(null, args);
     }
   });
 
@@ -477,44 +582,64 @@
     Name: 'Loader',
 
     init: function(rootUrl) {
-      this.rootUrl = rootUrl;
+      this.rootUrl = rootUrl.toLowerCase();
+      this.queryShortcuts = new Shortcuts(',.:;/!');
+      this.exportShortcuts = new Shortcuts(',.:;');
       this.scripts = {};
     },
-    require: function(query/*, exports*/, callback) {
+    require: function(query/*, exports*/, callback/*, module*/) {
       var scripts = this.scripts,
-          urls = this._parseQuery(query);
+          module = arguments[arguments.length-1],
+          urls = this._parseQuery(query),
+          requiredScripts = [];
+      if (!Function.is(callback)) {
+        var exports = callback;
+        callback = arguments[2];
+      }
+      // Если указано название модуля, значит в модуле используется require и нужно отложить загрузку скрипта
+      if (typeof module === 'string') {
+        module = this._normalizeUrl(module);
+        scripts[module].defer();
+        callback = (function(originalCallback) {
+          return function() {
+            originalCallback.apply(this, arguments);
+            scripts[module].loaded();
+          }
+        })(callback);
+      }
       urls.forEach(function(url) {
-        if (!scripts[url]) {
-          var script = scripts[url] = new Script(url);
-          script.load();
-        }
+        var script = scripts[url] = scripts[url] || new Script(url);
+        requiredScripts.push(script);
+        script.load();
       });
+      new Handler(loader, requiredScripts, callback, exports);
     },
     _parseQuery: function(query) {
-      var self = this;
       if (typeof query === 'string') {
-        var parts = this._getQueryParts(query);
+        query = this.queryShortcuts.replaceIn( normalizeQuery(query) );
+        var replaced = true,
+            parts = splitQuery(query);
       } else {
+        replaced = false;
         parts = query;
       }
       var urls = {};
       parts.forEach(function(part) {
         if (part) {
-          part = self._normalizePart(part);
+          part = this._normalizePart(part);
           // Начинается с "/", "http://" или "https://"
           if ( /^(\/|https?:\/\/)/i.test(part) ) {
             urls[part] = true;
           } else {
-            part = shortcuts.replaceIn(part);
-            qb.merge(urls, self._parsePart(part));
+            if (!replaced) {
+              part = shortcuts.replaceIn(part);
+            }
+            merge(urls, this._parsePart(part));
           }
         }
-      });
+      }, this);
       urls = Object.keys(urls);
       return urls;
-    },
-    _getQueryParts: function(query) {
-      return query.replace(/\s/g, '').split(';');
     },
     _normalizePart: function(part) {
       if ( part.startsWith('//') ) {
@@ -525,18 +650,15 @@
       return part;
     },
     _parsePart: function(part) {
-      var chunks = part.split(':').slice(0, 2),
-          base = (chunks.length > 1) ? chunks[0] + '/' : '',
-          childs = chunks[1] || chunks[0],
-          scripts = {},
-          normalizeUrl = this._normalizeUrl.bind(this);
-      childs.split(',').forEach(function(child) {
-        var script = normalizeUrl(base + child);
-        scripts[script] = true;
-      });
+      var chunks = splitPart(part, '/'),
+          scripts = {};
+      chunks.forEach(function(chunk) {
+        scripts[this._normalizeUrl(chunk)] = true;
+      }, this);
       return scripts;
     },
     _normalizeUrl: function(url) {
+      url = url.toLowerCase();
       if (!url.endsWith('.js')) {
         url += '.js';
       }
@@ -545,245 +667,46 @@
     }
   });
 
-  var shortcuts = new Shortcuts({
-        '$': 'jquery',
-        'cls': 'qb/classes'
-      });
-
-  var loader = window.loader = new Loader('/static/js/');
-
-  // Тесты
-  var test_queries = [
-    'jquery',
-    '$',
-    '   $;  ',
-    '$; $: $.form, $.widget; qb/classes: Collection; cls: Events;',
-    'http://cls.com; https://www.cls.$.com; //cls.com; www.cls.com; //www.cls.com; /static/other_js/lib'
-  ];
-
-  test_queries.forEach(function(query) {
-    loader._parseQuery(query);
-  });
-
-  loader.require('$');
-
-  /*----------   Загрузчик модулей   ----------*/
-  var UNLOADED = 0,
-      LOADING = 1,
-      LOADED = 2,
-      HEAD_ELEM = document.getElementsByTagName('head')[0];
-
-  var Module = function(path/*, moduleObj=null*/) {
-    this.path = path;
-    var obj = this.moduleObj = arguments[1] || null;
-    this.state = obj ? LOADED : UNLOADED;
-  };
-
-  merge(Module.prototype, {
-    load: function() {
-      if (this.state === UNLOADED) {
-        this.state = LOADING;
-        var script = document.createElement('script');
-        script.src = qb.jsRoot + this.path.split('.').join('/') + '.js';
-        HEAD_ELEM.appendChild(script);
-      }
-    },
-    loadedCallback: function(moduleObj) {
-      this.moduleObj = moduleObj;
-      ns(this.path, null, moduleObj);
-      this.state = LOADED;
-    }
-  });
-
-  var Handler = function(modules, callback, exports) {
-    this.modules = modules;
-    this.unloaded = modules.filter(function(module) {
-      return module.state !== LOADED;
-    });
-    this.callback = callback;
-    this.exports = exports;
-    this.executed = !callback;
-    if (this.isReady()) {
-      this.execute();
-    }
-  };
-
-  merge(Handler.prototype, {
-    notifyModuleLoaded: function(module) {
-      this.unloaded.remove(module);
-    },
-    execute: function() {
-      if (!this.executed) {
-        this.executed = true;
-        var args = DEFAULT_ARGS,
-            exports = this.exports;
-        if (exports) {
-          args = exports.map(
-              function(path) {
-                return this[path].moduleObj;
-              }, Loader.storage).concat(args);
-        }
-        this.callback.apply(qb, args);
-      }
-    },
-    isReady: function() {
-      return !this.unloaded.length;
-    },
-    loadNewModules: function() {
-      this.unloaded.forEach(function(module) {
-        if (module.state === UNLOADED) {
-          module.load();
-        }
-      });
-    }
-  });
-
-  var Loader = {
-    storage: {
-      'qb.core': new Module('qb.core', qb),
-      'qb.Class': new Module('qb.Class', Class)
-    },
-    handlers: [],
-    packages: {},
-    /*
-     *  Метод для парсинга строки запроса модулей и строки экспорта модулей
-     *  Примеры строк запроса:
-     *   "Class" -> ["Class"]
-     *   "Class; jQuery" -> ["Class", "jQuery"]
-     *   "Class; classes: Collection, Events" -> ["Class", "classes.Collection", "classes.Events"]
-     */
-    parseQuery: function(query) {
-      var parts = query.replace(/\s/g, '').split(';'),
-          packages = this.packages,
-          modules = [];
-      parts.forEach(function(part) {
-        if (part) {
-          if (packages[part]) {
-            modules.append(packages[part]);
-          } else {
-            var chunks = part.split(':').slice(0, 2),
-                parent = (chunks.length > 1) ? chunks[0] + '.' : '',
-                childs = chunks[1] || chunks[0];
-            childs.split(',').forEach(function(child) {
-              modules.push(parent + child);
-            });
-          }
-        }
-      });
-      return modules;
-    },
-    /*
-     *  Основной метод для выполнения js-кода, использующего дополнительные модули
-     *  "modules" - строка запроса модулей
-     *  "exports" - строка экспорта модулей
-     *  Варианты использования:
-     *   1) require(modules)  										-> загрузка указанных модулей (можно использовать для предзагрузки модулей)
-     *   2) require(modules, callback) 						-> вызов callback(module1..moduleN, *defaultArgs) после загрузки всех указанных модулей
-     *   3) require(modules, exports, callback)		-> вызов callback(exports1..exportsN, *defaultArgs) после загрузки всех указанных модулей
-     *   4) require(modules, false, callback) 		-> вызов callback(*defaultArgs) после загрузки всех указанных модулей
-     */
-    require: function(modules/*...*/) {
-      var callback = arguments[2] || arguments[1],
-          exports = (arguments.length > 2) ? arguments[1] : null,
-          storage = this.storage;
-      modules = this.parseQuery(modules);
-      if (exports) {
-        exports = this.parseQuery(exports);
-      } else if (exports === null) {
-        exports = modules;
-      }
-      modules = modules.map(function(path) {
-        return storage[path] || ( storage[path] = new Module(path) );
-      });
-      var handler = new Handler(modules, callback, exports);
-      if (!handler.executed) {
-        this.handlers.push(handler);
-      }
-      handler.loadNewModules();
-    },
-    /*
-     *  Метод для создания нового модуля.
-     *  Варианты использования:
-     *   1) module(modulePath, moduleImpl) 							-> создание модуля без зависимостей
-     *   2) module(modulePath, dependences, moduleImpl) -> создание модуля с зависимостями
-     */
-    module: function(modulePath/*, dependences=null*/, moduleImpl) {
-      var self = this,
-          args = arguments;
-      if (args.length == 2) {
-        qb(function() {
-          self.moduleLoaded(modulePath, moduleImpl.apply(this, arguments));
-        });
-      } else {
-        self.require(args[1], function() {
-          self.moduleLoaded(modulePath, args[2].apply(this, arguments));
-        });
-      }
-    },
-    /*  Добавляет пакеты модулей, на которые можно ссылаться из методов "module" или "require" по имени.
-     *  Варианты использования:
-     *   1) addPackages(name, query)
-     *   2) addPackages({'name1': 'query1', 'name2': 'query2'})
-     *  Пример:
-     *   qb.addPackages('Classes', 'classes: Collection, Events, Sync');
-     *   qb.require('Classes; jQuery', function(Collection, Events, Sync, jQuery) {...});
-     *
-     *   Также можно создавать новый пакет из существующих:
-     *   qb.addPackages({
-     *     'Pack1', 'Classes; $',
-     *     'Pack2', 'Pack1; Class'
-     *   });
-     */
-    addPackages: function(/*...*/) {
-      var self = this,
-          packages = arguments[0];
-      if (arguments.length > 1) {
-        packages = {};
-        packages[ arguments[0] ] = arguments[1];
-      }
-      each(packages, function(query, name) {
-        self.packages[name] = self.parseQuery(query);
-      });
-    },
-    moduleLoaded: function(path, moduleObj) {
-      var module = this.storage[path];
-      module.loadedCallback(moduleObj);
-      var ready = [];
-      this.handlers = this.handlers.filter(function(handler) {
-        handler.notifyModuleLoaded(module);
-        return handler.isReady() ? !ready.push(handler) : true;
-      });
-      ready.forEachCall('execute');
-    }
-  };
-
   // Определяем директорию со скриптами
   var scripts = document.getElementsByTagName('script'),
       rootRegEx = /(.*?)qb\/core\.js$/,
-      root = null;
+      rootJS = '/static/js/';
   for (var i = 0, len = scripts.length; i < len; i++) {
-    if (root = rootRegEx.exec(scripts[i].getAttribute('src'))) {
-      root = root[1];
+    if (rootJS = rootRegEx.exec(scripts[i].getAttribute('src'))) {
+      rootJS = rootJS[1];
       break;
     }
   }
 
-  // Добавляем сокращения
-  Loader.addPackages('$', 'jQuery');
+  var loader = new Loader(rootJS);
+  loader.queryShortcuts.add({
+    '$': 'jquery',
+    'cls': 'qb/classes'
+  });
+  loader.exportShortcuts.add({
+    'win': 'window',
+    'doc': 'document',
+    'def': 'qb; document; window'
+  });
+
+  loader.require('cls: Sync, Events, Collection; qb/dom/View; $',
+                 'qb: each, Class, Sync, Events, Collection, View; $; def',
+                 function() {
+    console.debug(arguments);
+  });
+
+  loader.require('cls:Lazy, Lazy/jQuerySelector', 'qb: Lazy, $$', function() {
+    console.debug(arguments);
+  });
 
   /*----------   Проброс в глобальную область   ----------*/
   merge(qb, {
-    jsRoot: root || '/js/',
-    loader: Loader,
+    loader: loader,
+    require: loader.require.bind(loader),
     ns: ns,
     merge: merge,
     each: each,
     Class: Class
-  });
-
-  // Добавляем ярлыки в qb для работы с модулями
-  ['require', 'module', 'moduleLoaded', 'addPackages'].forEach(function(method) {
-    qb[method] = Loader[method].bind(Loader);
   });
 
   window.qb = qb;

@@ -1,11 +1,12 @@
-qb.module('classes.Lazy', 'Class', function(Class, qb, document, window) {
+(function(qb, Class) {
 
-  var Lazy = new Class({
+  qb.Lazy = new Class({
     Name: 'Lazy',
+
     init: function(value) {
       this.value = value;
     },
-    changeValue: function(value) {
+    change: function(value) {
       delete this.result;
       this.value = value;
     },
@@ -20,6 +21,4 @@ qb.module('classes.Lazy', 'Class', function(Class, qb, document, window) {
     }
   });
 
-  return Lazy;
-
-});
+})(qb, qb.Class);

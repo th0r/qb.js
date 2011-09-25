@@ -1,13 +1,12 @@
-qb.module('classes.Lazy.jQuerySelector', 'Class; classes.Lazy; jQuery', function(Class, Lazy, qb, document, window) {
+qb.require('jQuery; qb/classes/Lazy', 'jQuery; qb: Class, Lazy; qb', function($, Class, Lazy, qb) {
 
-  var jQuerySelector = new Class({
+  qb.$$ = new Class({
     Name: 'LazyjQuerySelector',
     Extends: Lazy,
+
     action: function() {
       return $(this.value);
     }
   });
 
-  return jQuerySelector;
-
-});
+}, 'qb/classes/Lazy/jQuerySelector');

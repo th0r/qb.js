@@ -1,8 +1,9 @@
-qb.module('classes.Sync', 'Class, classes.Events', function(Class, Events, qb, document, window, undefined) {
+qb.require('qb/classes/Events', 'qb: Class, Events; qb', function(Class, Events, qb) {
 
-  var Sync =  new Class({
+  qb.Sync = new Class({
     Name: 'Sync',
     Implements: Events,
+
     init: function(events) {
       var self = this;
       self.counter = 0;
@@ -13,13 +14,11 @@ qb.module('classes.Sync', 'Class, classes.Events', function(Class, Events, qb, d
       self.counter++;
       return function() {
         fn.apply(this, arguments);
-        if (--self.counter == 0) {
+        if (!--self.counter) {
           self.fireEvent('onSuccess');
         }
       }
     }
   });
 
-  return Sync;
-
-});
+}, 'qb/classes/Sync');
