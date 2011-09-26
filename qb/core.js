@@ -85,6 +85,16 @@
         var args = Array.slice(arguments);
         return fn.apply(thisObj, prependedArgs ? prependedArgs.concat(args) : args);
       }
+    },
+    callAfter: function(otherFn) {
+      var fn = this;
+      return function() {
+        otherFn.apply(this, arguments);
+        return fn.apply(this, arguments);
+      }
+    },
+    callBefore: function(otherFn) {
+      return otherFn.callAfter(this);
     }
   }, false, true);
 
@@ -514,17 +524,18 @@
   }
 
   /**
-   * Преобразует часть запроса вида "qb/classes:Sync,Events" в массив ["qb/classes/Sync", "qb/classes/Events"]
+   * Преобразует часть запроса вида "qb/classes:Sync,!Events" в массив ["qb/classes/Sync", "!qb/classes/Events"]
    * @param {String} part  Часть запроса
    * @param {String} joiner  Строка, которая будет соединять части слева и справа от ":"
+   * @param {Boolean} checkPriority  Нужно ли проверять на наличие знака приоритета "!" и помещать его вначале парта
    * @returns {Array}
    */
-  function splitPart(part, joiner) {
+  function splitPart(part, joiner, checkPriority) {
     var chunks = part.split(':').slice(0, 2),
         base = (chunks.length > 1) ? chunks[0] + joiner : '',
         childs = (chunks[1] || chunks[0]).split(',');
     return base ? childs.map(function(child) {
-      return base + child;
+      return (checkPriority && child.charAt(0) === '!') ? '!' + base + child.substr(1) : base + child;
     }) : childs;
   }
 
@@ -537,7 +548,8 @@
       this.loader = loader;
       this.callback = callback;
       this.scripts = scripts;
-      this.exports = exports;
+      this.args = exports ? exports.args : null;
+      this.flags = exports ? exports.flags : null;
       if (count) {
         var handler = function() {
             if (--count === 0) {
@@ -548,33 +560,43 @@
 
         scripts.forEach(function(script) {
           script.onload(handler);
+          script.load();
         });
       } else {
         this._executeCallback();
       }
     },
-    _parseExports: function() {
-      var exports = this.exports;
-      if (exports) {
-        if (typeof exports === 'string') {
-          exports = this.loader.exportShortcuts.replaceIn( normalizeQuery(exports) );
-          var result = [];
-          splitQuery(exports).forEach(function(part) {
-            splitPart(part, '.').forEach(function(_export) {
-              this.push( ns(_export, window) );
-            }, result);
-          });
-          return result;
-        } else {
-          return Array.is(exports) ? exports : [exports];
-        }
-      } else {
-        return [];
+    _parseArgs: function() {
+      var args = this.args,
+          result = [];
+      if (args) {
+        // Заменяем шорткаты
+        args = this.loader.exportShortcuts.replaceIn(args);
+        splitQuery(args).forEach(function(part) {
+          splitPart(part, '.').forEach(function(_export) {
+            this.push( ns(_export, window) );
+          }, result);
+        });
       }
+      return result;
     },
     _executeCallback: function() {
-      var args = this._parseExports();
-      this.callback.apply(null, args);
+      var self = this,
+          args = this._parseArgs(),
+          flags = this.flags,
+          _call = function() {
+            self.callback.apply(null, args);
+          };
+      // Оборачиваем в $.ready
+      if (flags && flags.ready) {
+        // TODO: попробовать избавиться от jQuery
+        window.$(function() {
+          _call();
+        });
+      // Обычный вызов
+      } else {
+        _call();
+      }
     }
   });
 
@@ -588,10 +610,9 @@
       this.scripts = {};
     },
     require: function(query/*, exports*/, callback/*, module*/) {
-      var scripts = this.scripts,
-          module = arguments[arguments.length-1],
-          urls = this._parseQuery(query),
-          requiredScripts = [];
+      var self = this,
+          scripts = this.scripts,
+          module = arguments[arguments.length-1];
       if (!Function.is(callback)) {
         var exports = callback;
         callback = arguments[2];
@@ -600,19 +621,33 @@
       if (typeof module === 'string') {
         module = this._normalizeUrl(module);
         scripts[module].defer();
-        callback = (function(originalCallback) {
-          return function() {
-            originalCallback.apply(this, arguments);
-            scripts[module].loaded();
-          }
-        })(callback);
+        callback = callback.callBefore(function() {
+          scripts[module].loaded();
+        });
       }
-      urls.forEach(function(url) {
-        var script = scripts[url] = scripts[url] || new Script(url);
-        requiredScripts.push(script);
-        script.load();
-      });
-      new Handler(loader, requiredScripts, callback, exports);
+      exports = this._parseExports(exports);
+      if (exports && exports.flags.ready) {
+        // Принудительно добавляем к загружаемым скриптам jQuery
+        // TODO: как-то избавиться от этого говна (написать свой ready?)
+        query = 'jQuery;' + query;
+      }
+      var urls = this._parseQuery(query),
+          loadNormalScripts = function() {
+            self._loadScripts(urls.normal, callback, exports);
+          };
+      // Если есть приоритетные скрипты, загружаем сначала их, а потом остальные
+      if (urls.priority.length) {
+        this._loadScripts(urls.priority, loadNormalScripts);
+      } else {
+        loadNormalScripts();
+      }
+    },
+    _loadScripts: function(urls, callback, exports) {
+      var scripts = this.scripts,
+          requiredScripts = urls.map(function(url) {
+            return ( scripts[url] = scripts[url] || new Script(url) );
+          });
+      new Handler(this, requiredScripts, callback, exports);
     },
     _parseQuery: function(query) {
       if (typeof query === 'string') {
@@ -626,20 +661,61 @@
       var urls = {};
       parts.forEach(function(part) {
         if (part) {
-          part = this._normalizePart(part);
+          var url = this._parsePriority(part),
+              _part = this._normalizePart(url.part);
           // Начинается с "/", "http://" или "https://"
-          if ( /^(\/|https?:\/\/)/i.test(part) ) {
-            urls[part] = true;
+          if ( /^(\/|https?:\/\/)/i.test(_part) ) {
+            urls[_part] = url.priority;
           } else {
             if (!replaced) {
-              part = shortcuts.replaceIn(part);
+              part = this.queryShortcuts.replaceIn(part);
             }
             merge(urls, this._parsePart(part));
           }
         }
       }, this);
-      urls = Object.keys(urls);
-      return urls;
+      var priorityUrls = [],
+          normalUrls = [];
+      each(urls, function(priority, url) {
+        priority ? priorityUrls.push(url) : normalUrls.push(url);
+      });
+      return {
+        normal: normalUrls,
+        priority: priorityUrls
+      };
+    },
+    _parsePart: function(part) {
+      var chunks = splitPart(part, '/', true),
+          scripts = {};
+      chunks.forEach(function(chunk) {
+        var url = this._parsePriority(chunk);
+        scripts[this._normalizeUrl(url.part)] = url.priority;
+      }, this);
+      return scripts;
+    },
+    _parsePriority: function(part) {
+      var priority = (part.charAt(0) === '!');
+      return {
+        part: priority ? part.substr(1) : part,
+        priority: priority
+      }
+    },
+    _parseExports: function(exports) {
+      if (exports) {
+        var flags = [],
+            args = normalizeQuery(exports).replace(/(?:^|\|)\{(\w+)\}$/i, function(_, _flags) {
+              _flags.split(',').forEach(function(flag) {
+                this[flag] = true;
+              }, flags);
+              return '';
+            });
+        return {
+          args: args || null,
+          flags: flags
+        }
+      } else {
+        return null;
+      }
     },
     _normalizePart: function(part) {
       if ( part.startsWith('//') ) {
@@ -649,21 +725,12 @@
       }
       return part;
     },
-    _parsePart: function(part) {
-      var chunks = splitPart(part, '/'),
-          scripts = {};
-      chunks.forEach(function(chunk) {
-        scripts[this._normalizeUrl(chunk)] = true;
-      }, this);
-      return scripts;
-    },
     _normalizeUrl: function(url) {
       url = url.toLowerCase();
       if (!url.endsWith('.js')) {
         url += '.js';
       }
-      url = this.rootUrl + url;
-      return url;
+      return this.rootUrl + url;
     }
   });
 
@@ -689,15 +756,16 @@
     'def': 'qb; document; window'
   });
 
-  loader.require('cls: Sync, Events, Collection; qb/dom/View; $',
+  loader.require('$.jgrowl; qb/dom/resourceLoader; !$', 'qb.loadCSS; $ | {ready}', function(loadCSS, $) {
+    loadCSS('/static/css/jquery.jgrowl.css');
+    $.jGrowl('Аааааааааааааааааааааа!!!', {sticky: true});
+  });
+
+  /*loader.require('cls: Sync, Events, Collection; qb/dom/View; !$',
                  'qb: each, Class, Sync, Events, Collection, View; $; def',
                  function() {
     console.debug(arguments);
-  });
-
-  loader.require('cls:Lazy, Lazy/jQuerySelector', 'qb: Lazy, $$', function() {
-    console.debug(arguments);
-  });
+  });*/
 
   /*----------   Проброс в глобальную область   ----------*/
   merge(qb, {
