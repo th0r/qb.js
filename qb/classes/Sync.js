@@ -15,7 +15,7 @@ qb.require('qb/classes/Events', 'qb: Class, Events; qb', function(Class, Events,
       return function() {
         fn.apply(this, arguments);
         if (!--self.counter) {
-          self.fireEvent('onSuccess');
+          self.triggerEvent('onSuccess');
         }
       }
     }

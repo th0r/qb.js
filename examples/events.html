@@ -30,7 +30,7 @@
 			click: getLogger('click'),
 			move: [getLogger('move1'), getLogger('move2')]
 											 });
-		e.addEvents({'debug': [logArgs, logArgs]}).fireEvent('debug', [1], window);
+		e.addEvents({'debug': [logArgs, logArgs]}).triggerEvent('debug', [1], window);
 		console.debug(e);
 	</script>
 </body>

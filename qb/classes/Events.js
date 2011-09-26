@@ -41,7 +41,7 @@
       this.$events = {};
       return this;
     },
-    fireEvent: function(name/*, args=null, thisObj=self*/) {
+    triggerEvent: function(name/*, args=null, thisObj=self*/) {
       var self = this,
           handlers = self.$events[name];
       if (handlers && handlers.length) {
