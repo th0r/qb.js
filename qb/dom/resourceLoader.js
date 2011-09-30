@@ -1,8 +1,8 @@
-(function(qb, document) {
+(function(qb, Script, document) {
 
   var headElem = document.getElementsByTagName('head')[0];
 
-  function loadCSS(src) {
+  function getCSS(src) {
     var css = document.createElement('link');
     css.rel = 'stylesheet';
     css.href = src;
@@ -10,6 +10,11 @@
     return css;
   }
 
-  qb.loadCSS = loadCSS;
+  function getJS(src, callbacks) {
+    return new Script(src, true).onload(callbacks);
+  }
 
-})(qb, document);
+  qb.getCSS = getCSS;
+  qb.getJS = getJS;
+
+})(qb, qb.Script, document);

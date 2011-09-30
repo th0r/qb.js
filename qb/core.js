@@ -328,7 +328,7 @@
 
       // Вызов собственного конструктора
       if (init) {
-        init.apply(self, arguments);
+        return init.apply(self, arguments);
       }
     };
 
@@ -363,9 +363,10 @@
           attr.$name = name;
         }
       });
+      // TODO: зацикливание из-за неправильного выбора родительской функции
       proto.$super = function() {
         var func = Extends.prototype[arguments.callee.caller.$name];
-        return arguments.length ? func.apply(this, arguments) : func;
+        return func.apply(this, arguments);
       }
     }
     // Название класса
@@ -375,6 +376,147 @@
 
     return constructor;
   }
+
+  /*----------   Реализация Deferred   ----------*/
+  var UNRESOLVED = 0,
+      RESOLVED = 1,
+      REJECTED = 2;
+
+  function makeCallbackMethod(prop, callStatus) {
+    return function(callbacks) {
+      var status = this.$status;
+      if (status === UNRESOLVED) {
+        this[prop].append( Array.from(callbacks) );
+      } else if (status === callStatus || callStatus === true) {
+        this._callDeferredCallbacks(callbacks);
+      }
+      return this;
+    }
+  }
+
+  function makeResolveMethod(prop, resolveStatus) {
+    return function(/*args*/) {
+      if (this.$status === UNRESOLVED) {
+        this.$status = resolveStatus;
+        this.$args = Array.slice(arguments);
+        this._callDeferredCallbacks( this[prop].concat(this.$always) );
+        delete this.$done;
+        delete this.$fail;
+        delete this.$always;
+      }
+      return this;
+    }
+  }
+
+  var Deferred = new Class({
+    Name: 'Deferred',
+    Static: {
+      when: function(/*deferreds*/) {
+        var result = new Deferred(),
+            defs = Array.slice(arguments),
+            unresolved = defs.length,
+            args = [];
+        function fail() {
+          var args = Array.slice(arguments);
+          args.unshift(this);
+          result.reject.apply(result, args);
+        }
+        defs.forEach(function(def, i) {
+          if (!(def instanceof Deferred)) {
+            args[i] = def;
+            unresolved--;
+          } else {
+            def.done(function() {
+              args[i] = Array.slice(arguments);
+              if (!--unresolved) {
+                result.resolve.apply(result, args);
+              }
+            });
+            def.fail(fail);
+          }
+        });
+        if (!unresolved) {
+          result.resolve.apply(result, args);
+        }
+        return result;
+      }
+    },
+
+    init: function() {
+      this.$done = [];
+      this.$fail = [];
+      this.$always = [];
+      this.$status = UNRESOLVED,
+      this.$args = null;
+    },
+    _callDeferredCallbacks: function(callbacks) {
+      var self = this,
+          args = this.$args;
+      Array.from(callbacks).forEach(function(callback) {
+        callback.apply(this, args);
+      }, self);
+    },
+    done: makeCallbackMethod('$done', RESOLVED),
+    fail: makeCallbackMethod('$fail', REJECTED),
+    then: function(doneCallbacks, failCallbacks) {
+      return this.done(doneCallbacks).fail(failCallbacks);
+    },
+    always: makeCallbackMethod('$always', true),
+    resolve: makeResolveMethod('$done', RESOLVED),
+    // TODO: resolveWith
+    // TODO: rejectWith
+    when: function(/*deferreds, argsModifier=null*/) {
+      var self = this,
+          argsModifier = Function.check(arguments[arguments.length-1]);
+      Deferred.when.apply(null, arguments).always(function() {
+        var args = argsModifier ? argsModifier.apply(this, arguments) : arguments;
+        self[this.isResolved() ? 'resolve' : 'reject'].apply(self, args);
+      });
+      return this;
+    },
+    reject: makeResolveMethod('$fail', REJECTED),
+    isResolved: function() {
+      return this.$status === RESOLVED;
+    },
+    isRejected: function() {
+      return this.$status === REJECTED;
+    }
+  });
+
+//  function msg(text) {
+//    return function() {
+//      console.debug(text, this, arguments);
+//    }
+//  }
+//
+//  var def1 = new Deferred();
+//  def1.toString = function() {
+//    return 'def1';
+//  };
+//  def1.then(msg('def1-done'), msg('def1-fail'));
+//  var def2 = new Deferred();
+//  def2.then(msg('def2-done'), msg('def2-fail'));
+//  def2.toString = function() {
+//    return 'def2';
+//  };
+//  setTimeout(function() {
+//    var method = Math.random() > 0.3 ? 'resolve' : 'reject';
+//    def1[method]('def1.' + method);
+//  }, Math.random()*1500);
+//  setTimeout(function() {
+//    var method = Math.random() > 0.3 ? 'resolve' : 'reject';
+//    def2[method]('def2.' + method);
+//  }, Math.random()*1500);
+//  def.done(msg('done1'));
+//  def.done([msg('done2'), msg('done3')]);
+//  def.then(msg('done-in-then'), msg('fail-in-then'));
+//  def.fail(msg('fail'));
+//  def.then(msg('then'));
+//  def.resolve('param1', 'param2', 'param3');
+//  def.fail(msg('fail-after'));
+//  def.done(msg('done-after'));
+//  def.then(msg('done-in-then-after'), msg('fail-in-then-after'));
+//  Deferred.when(def1, def2, 'not-def').then(msg('when-done'), msg('when-fail'));
 
   /*----------   Новый загрузчик   ------------*/
   /**
@@ -439,6 +581,7 @@
 
   var Script = new Class({
     Name: Script,
+    Extends: Deferred,
     Static: {
       UNLOADED: 0,
       LOADING: 1,
@@ -446,12 +589,14 @@
       LOAD_ERROR: 3
     },
 
-    init: function(url) {
+    init: function(url, loadNow) {
+      Deferred.call(this);
       this.src = url;
       this.elem = null;
       this.status = Script.UNLOADED;
-      this.callbacks = [];
-      this.loaded = null;
+      if (loadNow) {
+        this.load();
+      }
     },
     load: function() {
       if (this.status === Script.UNLOADED) {
@@ -462,32 +607,24 @@
         HEAD_ELEM.appendChild(elem);
       }
     },
-    onload: function(callback) {
-      var status = this.status;
-      if (status === Script.LOADED) {
-        this._executeCallback(callback);
-      } else {
-        this.callbacks.push(callback);
-      }
+    resolve: function() {
+      var elem = this.elem;
+      elem.onreadystatechange = elem.onload = elem.onerror = null;
+      this.status = Script.LOADED;
+      this.$super(this);
     },
-    defer: function() {
+    reject: function() {
+      this.status = Script.LOAD_ERROR;
+      this.$super.apply(this, arguments);
+    },
+    deferLoad: function() {
       var elem = this.elem;
       elem.onreadystatechange = elem.onload = null;
-    },
-    _executeCallback: function(callback) {
-      callback.call(this, this);
     },
     _bindLoadHandler: function() {
       var self = this,
           elem = this.elem,
-          loaded = this.loaded = function() {
-            elem.onreadystatechange = elem.onload = elem.onerror = null;
-            self.status = Script.LOADED;
-            var callbacks = self.callbacks, callback;
-            while (callback = callbacks.shift()) {
-              self._executeCallback(callback);
-            }
-          };
+          loaded = this.resolve.bind(this);
       elem.onreadystatechange = function() {
         console.log( '"{0}": readyState = "{1}"'.format([self.src, this.readyState]) );
         if (this.readyState == 'loaded' || this.readyState == 'complete') {
@@ -495,15 +632,14 @@
         }
       };
       elem.onload = loaded;
-      elem.onerror = function(message, file, line) {
-        self.status = Script.LOAD_ERROR;
-        throw 'Не удалось загрузить скрипт "{1}":\n  Ошибка на строке {2}: "{0}"'.format([message, file, line]);
-      }
+      elem.onerror = this.reject.bind(this);
     },
     toString: function() {
       return 'Script [{}]'.format(this.src);
     }
   });
+  // Чисто для удобства восприятия
+  Script.prototype.onload = Script.prototype.done;
 
   /**
    * Нормализует строку запроса (удаляет все пробельные символы)
@@ -541,30 +677,35 @@
 
   var Handler = new Class({
     Name: 'Handler',
+    Extends: Deferred,
 
-    init: function(loader, scripts, callback, exports) {
-      var self = this,
-          count = scripts.length;
+    init: function(loader, scripts, exports) {
+      Deferred.call(this);
+
+      scripts.forEachCall('load');
       this.loader = loader;
-      this.callback = callback;
-      this.scripts = scripts;
       this.args = exports ? exports.args : null;
       this.flags = exports ? exports.flags : null;
-      if (count) {
-        var handler = function() {
-            if (--count === 0) {
-              console.log( 'Callback for scripts', scripts, 'executed' );
-              self._executeCallback();
-            }
-          };
-
-        scripts.forEach(function(script) {
-          script.onload(handler);
-          script.load();
+      var argsModifier = this._parseArgs.bind(this);
+      scripts.push(argsModifier);
+      this.when.apply(this, scripts).fail(this._handleLoadError);
+    },
+    // Переопределяет метод Deferred
+    _callDeferredCallbacks: function(callbacks) {
+      var flags = this.flags;
+      if (flags && flags.ready) {
+        var $ = window.$;
+        callbacks = Array.from(callbacks).map(function(callback) {
+          return function() {
+            var thisObj = this,
+                args = arguments;
+            $(function() {
+              callback.apply(thisObj, args);
+            })
+          }
         });
-      } else {
-        this._executeCallback();
       }
+      this.$super(callbacks);
     },
     _parseArgs: function() {
       var args = this.args,
@@ -580,23 +721,8 @@
       }
       return result;
     },
-    _executeCallback: function() {
-      var self = this,
-          args = this._parseArgs(),
-          flags = this.flags,
-          _call = function() {
-            self.callback.apply(null, args);
-          };
-      // Оборачиваем в $.ready
-      if (flags && flags.ready) {
-        // TODO: попробовать избавиться от jQuery
-        window.$(function() {
-          _call();
-        });
-      // Обычный вызов
-      } else {
-        _call();
-      }
+    _handleLoadError: function(script, message, file, line) {
+      throw 'Не удалось загрузить скрипт "{1}":\n  Ошибка на строке {2}: "{0}"'.format([message, file, line]);
     }
   });
 
@@ -617,13 +743,12 @@
         var exports = callback;
         callback = arguments[2];
       }
+      var callbacks = [callback];
       // Если указано название модуля, значит в модуле используется require и нужно отложить загрузку скрипта
       if (typeof module === 'string') {
-        module = this._normalizeUrl(module);
-        scripts[module].defer();
-        callback = callback.callBefore(function() {
-          scripts[module].loaded();
-        });
+        module = scripts[this._normalizeUrl(module)];
+        module.deferLoad();
+        callbacks.push( module.resolve.bind(module) );
       }
       exports = this._parseExports(exports);
       if (exports && exports.flags.ready) {
@@ -633,7 +758,7 @@
       }
       var urls = this._parseQuery(query),
           loadNormalScripts = function() {
-            self._loadScripts(urls.normal, callback, exports);
+            self._loadScripts(urls.normal, callbacks, exports);
           };
       // Если есть приоритетные скрипты, загружаем сначала их, а потом остальные
       if (urls.priority.length) {
@@ -647,7 +772,7 @@
           requiredScripts = urls.map(function(url) {
             return ( scripts[url] = scripts[url] || new Script(url) );
           });
-      new Handler(this, requiredScripts, callback, exports);
+      new Handler(this, requiredScripts, exports).done(callback);
     },
     _parseQuery: function(query) {
       if (typeof query === 'string') {
@@ -756,10 +881,10 @@
     'def': 'qb; document; window'
   });
 
-  loader.require('$.jgrowl; qb/dom/resourceLoader; !$', 'qb.loadCSS; $ | {ready}', function(loadCSS, $) {
+  /*loader.require('$.jgrowl; qb/dom/resourceLoader; !$', 'qb.loadCSS; $ | {ready}', function(loadCSS, $) {
     loadCSS('/static/css/jquery.jgrowl.css');
     $.jGrowl('Аааааааааааааааааааааа!!!', {sticky: true});
-  });
+  });*/
 
   /*loader.require('cls: Sync, Events, Collection; qb/dom/View; !$',
                  'qb: each, Class, Sync, Events, Collection, View; $; def',
@@ -774,7 +899,10 @@
     ns: ns,
     merge: merge,
     each: each,
-    Class: Class
+    Class: Class,
+    Deferred: Deferred,
+    Script: Script,
+    when: Deferred.when
   });
 
   window.qb = qb;

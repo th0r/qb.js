@@ -1,4 +1,5 @@
 qb.require('jQuery', 'qb: each, Class; qb; jQuery; document', function(each, Class, qb, $, document, undefined) {
+
   /*
    * Usage:
    *
@@ -284,7 +285,5 @@ qb.require('jQuery', 'qb: each, Class; qb; jQuery; document', function(each, Cla
   });
 
   qb.View = View;
-
-  console.debug('View loaded');
 
 }, 'qb/dom/View');
