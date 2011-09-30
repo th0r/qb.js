@@ -7,7 +7,7 @@
     init: function(params) {
       Script.call(this, '//mc.yandex.ru/metrika/watch.js', true);
       this.onload(function() {
-        this.counter = new Ya.Metrics(params);
+        this.counter = new Ya.Metrika(params);
       })
     },
     hit: function(params) {

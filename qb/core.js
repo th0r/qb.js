@@ -337,7 +337,7 @@
       merge(constructor, Static, true);
     }
     // Наследование (часть 1)
-    var proto = constructor.prototype;
+    var proto = constructor.fn = constructor.prototype;
     if (Extends) {
       Empty.prototype = Extends.prototype;
       proto = constructor.prototype = new Empty();
@@ -355,20 +355,7 @@
     delete info.init;
     merge(proto, info, true);
     proto.constructor = constructor;
-    // Наследование (часть 2)
-    if (Extends) {
-      // Вешаем имена на методы, чтобы можно было использовать метод super
-      each(info, function(attr, name) {
-        if (Function.is(attr)) {
-          attr.$name = name;
-        }
-      });
-      // TODO: зацикливание из-за неправильного выбора родительской функции
-      proto.$super = function() {
-        var func = Extends.prototype[arguments.callee.caller.$name];
-        return func.apply(this, arguments);
-      }
-    }
+
     // Название класса
     if (Name) {
       constructor.toString = Function.from(Name);
@@ -483,41 +470,6 @@
     }
   });
 
-//  function msg(text) {
-//    return function() {
-//      console.debug(text, this, arguments);
-//    }
-//  }
-//
-//  var def1 = new Deferred();
-//  def1.toString = function() {
-//    return 'def1';
-//  };
-//  def1.then(msg('def1-done'), msg('def1-fail'));
-//  var def2 = new Deferred();
-//  def2.then(msg('def2-done'), msg('def2-fail'));
-//  def2.toString = function() {
-//    return 'def2';
-//  };
-//  setTimeout(function() {
-//    var method = Math.random() > 0.3 ? 'resolve' : 'reject';
-//    def1[method]('def1.' + method);
-//  }, Math.random()*1500);
-//  setTimeout(function() {
-//    var method = Math.random() > 0.3 ? 'resolve' : 'reject';
-//    def2[method]('def2.' + method);
-//  }, Math.random()*1500);
-//  def.done(msg('done1'));
-//  def.done([msg('done2'), msg('done3')]);
-//  def.then(msg('done-in-then'), msg('fail-in-then'));
-//  def.fail(msg('fail'));
-//  def.then(msg('then'));
-//  def.resolve('param1', 'param2', 'param3');
-//  def.fail(msg('fail-after'));
-//  def.done(msg('done-after'));
-//  def.then(msg('done-in-then-after'), msg('fail-in-then-after'));
-//  Deferred.when(def1, def2, 'not-def').then(msg('when-done'), msg('when-fail'));
-
   /*----------   Новый загрузчик   ------------*/
   /**
    *    1) Загрузка скриптов из root-js директории (расширение ".js" можно опускать - если его нет, оно добавится автоматически):
@@ -580,7 +532,7 @@
   });
 
   var Script = new Class({
-    Name: Script,
+    Name: 'Script',
     Extends: Deferred,
     Static: {
       UNLOADED: 0,
@@ -611,11 +563,11 @@
       var elem = this.elem;
       elem.onreadystatechange = elem.onload = elem.onerror = null;
       this.status = Script.LOADED;
-      this.$super(this);
+      Deferred.fn.resolve.call(this, this);
     },
     reject: function() {
       this.status = Script.LOAD_ERROR;
-      this.$super.apply(this, arguments);
+      Deferred.fn.reject.apply(this, arguments);
     },
     deferLoad: function() {
       var elem = this.elem;
@@ -705,7 +657,7 @@
           }
         });
       }
-      this.$super(callbacks);
+      Deferred.fn._callDeferredCallbacks.call(this, callbacks);
     },
     _parseArgs: function() {
       var args = this.args,
@@ -728,6 +680,9 @@
 
   var Loader = new Class({
     Name: 'Loader',
+    Static: {
+      FULL_URL: /^(\/|https?:\/\/)/i
+    },
 
     init: function(rootUrl) {
       this.rootUrl = rootUrl.toLowerCase();
@@ -783,13 +738,14 @@
         replaced = false;
         parts = query;
       }
-      var urls = {};
+      var urls = {},
+          fullUrl = Loader.FULL_URL;
       parts.forEach(function(part) {
         if (part) {
           var url = this._parsePriority(part),
               _part = this._normalizePart(url.part);
           // Начинается с "/", "http://" или "https://"
-          if ( /^(\/|https?:\/\/)/i.test(_part) ) {
+          if ( fullUrl.test(_part) ) {
             urls[_part] = url.priority;
           } else {
             if (!replaced) {
