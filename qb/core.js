@@ -364,6 +364,110 @@
     return constructor;
   }
 
+  /*----------   Реализация Events   ----------*/
+  function getEventInfo(name) {
+    var info = name.split('.', 2);
+    return {
+      ns: info[1] || 'default',
+      name: info[0]
+    }
+  }
+
+  var Events = new Class({
+
+    Name: 'Events',
+    init: function(/*events=null*/) {
+      var events = arguments[0] || null;
+      this.$events = this.$events || {};
+      if (events) {
+        this.addEvents(events);
+      }
+    },
+   /**
+    * Добавляет хэндлеры на события
+    * Также можно вызывать так: addEvents(eventsObj, [triggerOnce]),
+    * где eventsObj = {<name>: <handler>, ...}
+    * @param {String} name  Имя события
+    * @param handler  Обработчик (слушатель) события
+    * @param {Boolean} [triggerOnce=false]  Вызвать данный обработчик только один раз. Опционально.
+    */
+    addEvents: function(name, handler, triggerOnce) {
+      if (typeof name === 'string') {
+        var eventsObj = {};
+        eventsObj[name] = handler;
+      } else {
+        eventsObj = name;
+        triggerOnce = handler;
+      }
+      triggerOnce = !!triggerOnce;
+      if (eventsObj) {
+        var events = this.$events;
+        each(eventsObj, function(handler, name) {
+          var info = getEventInfo(name),
+              ns = info.ns;
+          name = info.name;
+          ns = events[ns] = events[ns] || {};
+          (ns[name] = ns[name] || []).push([handler, triggerOnce]);
+        });
+      }
+    },
+    removeEvents: function(name, handler) {
+      var info = getEventInfo(name),
+          ns = info.ns,
+          events = this.$events;
+      name = info.name;
+      // Если указано 'click', то удаляем обработчики на событие 'click' из всех ns
+      if (ns === 'default' && !handler) {
+        each(events, function(ns) {
+          delete ns[name];
+        });
+      // Если указано '.someNS', то удаляем данный ns
+      } else if (!name) {
+        delete events[ns];
+      } else if (ns = events[ns]) {
+        if (handler) {
+          var handlers = ns[name];
+          if (handlers && handlers.length) {
+            for (var i = 0, len = handlers.length; i < len; i++) {
+              if (handlers[i][0] === handler) {
+                handlers.splice(i--, 1);
+                len--;
+              }
+            }
+          }
+        // Если указано 'click.someNS' без handler-а, то удаляем все хэндлеры на click из этой ns
+        } else {
+          delete ns[name];
+        }
+      }
+    },
+    triggerEvent: function(name/*, args=null, thisObj=self*/) {
+      var args = arguments[1] || [],
+          thisObj = (arguments.length > 2) ? arguments[2] : this;
+      each(this.$events, function(ns) {
+        var handlers = ns[name];
+        if (handlers && handlers.length) {
+          for (var i = 0, len = handlers.length; i < len; i++) {
+            var handler = handlers[i];
+            handler[0].apply(thisObj, args);
+            if (handler[1]) {
+              handlers.splice(i--, 1);
+              len--;
+            }
+          }
+        }
+      });
+    }
+  });
+
+  var signals = new Events(),
+      p = Events.prototype;
+  merge(signals, {
+    listen: p.addEvents,
+    remove: p.removeEvents,
+    send: p.triggerEvent
+  });
+
   /*----------   Реализация Deferred   ----------*/
   var UNRESOLVED = 0,
       RESOLVED = 1,
@@ -392,6 +496,15 @@
         delete this.$always;
       }
       return this;
+    }
+  }
+
+  function makeResolveWithMethod(method) {
+    return function(thisObj/*, args*/) {
+      if (this.$status === UNRESOLVED) {
+        this.$with = thisObj;
+        return this[method].apply( this, Array.slice(arguments, 1) );
+      }
     }
   }
 
@@ -433,15 +546,16 @@
       this.$done = [];
       this.$fail = [];
       this.$always = [];
-      this.$status = UNRESOLVED,
+      this.$status = UNRESOLVED;
+      this.$with = this;
       this.$args = null;
     },
     _callDeferredCallbacks: function(callbacks) {
-      var self = this,
+      var thisObj = this.$with,
           args = this.$args;
       Array.from(callbacks).forEach(function(callback) {
-        callback.apply(this, args);
-      }, self);
+        callback.apply(thisObj, args);
+      });
     },
     done: makeCallbackMethod('$done', RESOLVED),
     fail: makeCallbackMethod('$fail', REJECTED),
@@ -450,18 +564,22 @@
     },
     always: makeCallbackMethod('$always', true),
     resolve: makeResolveMethod('$done', RESOLVED),
-    // TODO: resolveWith
-    // TODO: rejectWith
-    when: function(/*deferreds, argsModifier=null*/) {
-      var self = this,
-          argsModifier = Function.check(arguments[arguments.length-1]);
-      Deferred.when.apply(null, arguments).always(function() {
-        var args = argsModifier ? argsModifier.apply(this, arguments) : arguments;
-        self[this.isResolved() ? 'resolve' : 'reject'].apply(self, args);
-      });
-      return this;
-    },
+    resolveWith: makeResolveWithMethod('resolve'),
     reject: makeResolveMethod('$fail', REJECTED),
+    rejectWith: makeResolveWithMethod('reject'),
+    pipe: function(doneFilter, failFilter) {
+      var result = new Deferred();
+      [doneFilter, failFilter].forEach(function(filter, i) {
+        if (filter) {
+          this[i ? 'fail' : 'done'](function() {
+            var args = Array.from( filter.apply(this, arguments) );
+            args.unshift(this);
+            result[(i ? 'reject' : 'resolve') + 'With'].apply(result, args);
+          });
+        }
+      }, this);
+      return result;
+    },
     isResolved: function() {
       return this.$status === RESOLVED;
     },
@@ -612,18 +730,17 @@
   }
 
   /**
-   * Преобразует часть запроса вида "qb/classes:Sync,!Events" в массив ["qb/classes/Sync", "!qb/classes/Events"]
+   * Преобразует часть запроса вида "qb/classes:Sync,Events" в массив ["qb/classes/Sync", "qb/classes/Events"]
    * @param {String} part  Часть запроса
    * @param {String} joiner  Строка, которая будет соединять части слева и справа от ":"
-   * @param {Boolean} checkPriority  Нужно ли проверять на наличие знака приоритета "!" и помещать его вначале парта
    * @returns {Array}
    */
-  function splitPart(part, joiner, checkPriority) {
-    var chunks = part.split(':').slice(0, 2),
-        base = (chunks.length > 1) ? chunks[0] + joiner : '',
+  function splitPart(part, joiner) {
+    var chunks = part.split(':', 2),
+        base = (chunks.length > 1) ? chunks[0] + joiner : null,
         childs = (chunks[1] || chunks[0]).split(',');
     return base ? childs.map(function(child) {
-      return (checkPriority && child.charAt(0) === '!') ? '!' + base + child.substr(1) : base + child;
+      return base + child;
     }) : childs;
   }
 
@@ -634,30 +751,32 @@
     init: function(loader, scripts, exports) {
       Deferred.call(this);
 
-      scripts.forEachCall('load');
+      this.scripts = scripts;
       this.loader = loader;
       this.args = exports ? exports.args : null;
       this.flags = exports ? exports.flags : null;
-      var argsModifier = this._parseArgs.bind(this);
-      scripts.push(argsModifier);
-      this.when.apply(this, scripts).fail(this._handleLoadError);
+      Deferred.when.apply(null, scripts).then(
+          this._parseArgs.bind(this),
+          this._handleLoadError
+      );
+    },
+    load: function() {
+      this.scripts.forEachCall('load');
     },
     // Переопределяет метод Deferred
     _callDeferredCallbacks: function(callbacks) {
       var flags = this.flags;
       if (flags && flags.ready) {
-        var $ = window.$;
-        callbacks = Array.from(callbacks).map(function(callback) {
-          return function() {
-            var thisObj = this,
-                args = arguments;
-            $(function() {
-              callback.apply(thisObj, args);
-            })
-          }
-        });
+        var thisObj = this.$with,
+            args = this.$args;
+        Array.from(callbacks).forEach(function(callback) {
+          this(function() {
+            callback.apply(thisObj, args);
+          });
+        }, window.$);
+      } else {
+        Deferred.fn._callDeferredCallbacks.call(this, callbacks);
       }
-      Deferred.fn._callDeferredCallbacks.call(this, callbacks);
     },
     _parseArgs: function() {
       var args = this.args,
@@ -671,12 +790,16 @@
           }, result);
         });
       }
-      return result;
+      this.resolve.apply(this, result);
     },
     _handleLoadError: function(script, message, file, line) {
+      this.reject.apply(this, arguments);
       throw 'Не удалось загрузить скрипт "{1}":\n  Ошибка на строке {2}: "{0}"'.format([message, file, line]);
     }
   });
+
+  var PARTS_PRIORITY = /^!|^\{(\d+)}/i,
+      EXPORTS_FLAGS = /(?:^|\|)\{(\w+)\}$/i;
 
   var Loader = new Class({
     Name: 'Loader',
@@ -686,7 +809,7 @@
 
     init: function(rootUrl) {
       this.rootUrl = rootUrl.toLowerCase();
-      this.queryShortcuts = new Shortcuts(',.:;/!');
+      this.queryShortcuts = new Shortcuts(',.:;/!}');
       this.exportShortcuts = new Shortcuts(',.:;');
       this.scripts = {};
     },
@@ -712,22 +835,22 @@
         query = 'jQuery;' + query;
       }
       var urls = this._parseQuery(query),
-          loadNormalScripts = function() {
-            self._loadScripts(urls.normal, callbacks, exports);
-          };
-      // Если есть приоритетные скрипты, загружаем сначала их, а потом остальные
-      if (urls.priority.length) {
-        this._loadScripts(urls.priority, loadNormalScripts);
-      } else {
-        loadNormalScripts();
-      }
+          handlers = urls.map(function(part) {
+            var _exports = ( part === this.last() ) ? exports : null;
+            return self._getLoadHandler(part, _exports);
+          }, urls);
+      handlers.forEach(function(handler, i) {
+        var next = this[i+1];
+        handler.done(next ? function() { next.load() } : callbacks);
+      }, handlers);
+      handlers[0].load();
     },
-    _loadScripts: function(urls, callback, exports) {
+    _getLoadHandler: function(urls, exports) {
       var scripts = this.scripts,
           requiredScripts = urls.map(function(url) {
             return ( scripts[url] = scripts[url] || new Script(url) );
           });
-      new Handler(this, requiredScripts, exports).done(callback);
+      return new Handler(this, requiredScripts, exports);
     },
     _parseQuery: function(query) {
       if (typeof query === 'string') {
@@ -755,18 +878,10 @@
           }
         }
       }, this);
-      var priorityUrls = [],
-          normalUrls = [];
-      each(urls, function(priority, url) {
-        priority ? priorityUrls.push(url) : normalUrls.push(url);
-      });
-      return {
-        normal: normalUrls,
-        priority: priorityUrls
-      };
+      return this._prioritizeUrls(urls);
     },
     _parsePart: function(part) {
-      var chunks = splitPart(part, '/', true),
+      var chunks = splitPart(part, '/'),
           scripts = {};
       chunks.forEach(function(chunk) {
         var url = this._parsePriority(chunk);
@@ -775,16 +890,20 @@
       return scripts;
     },
     _parsePriority: function(part) {
-      var priority = (part.charAt(0) === '!');
+      var priority = null;
+      part = part.replace(PARTS_PRIORITY, function(_, num) {
+        priority = +num || 1;
+        return '';
+      });
       return {
-        part: priority ? part.substr(1) : part,
+        part: part,
         priority: priority
       }
     },
     _parseExports: function(exports) {
       if (exports) {
         var flags = [],
-            args = normalizeQuery(exports).replace(/(?:^|\|)\{(\w+)\}$/i, function(_, _flags) {
+            args = normalizeQuery(exports).replace(EXPORTS_FLAGS, function(_, _flags) {
               _flags.split(',').forEach(function(flag) {
                 this[flag] = true;
               }, flags);
@@ -800,7 +919,7 @@
     },
     _normalizePart: function(part) {
       if ( part.startsWith('//') ) {
-        part = 'http:' + part;
+        part = window.location.protocol + part;
       } else if ( part.startsWith('www.') ) {
         part = 'http://' + part;
       }
@@ -812,6 +931,16 @@
         url += '.js';
       }
       return this.rootUrl + url;
+    },
+    _prioritizeUrls: function(urls) {
+      var result = [];
+      each(urls, function(priority, url) {
+        priority = priority || 0;
+        var urls = result[priority] = result[priority] || [];
+        urls.push(url);
+      });
+      result.push(result.shift());
+      return result.clean();
     }
   });
 
@@ -837,28 +966,23 @@
     'def': 'qb; document; window'
   });
 
-  /*loader.require('$.jgrowl; qb/dom/resourceLoader; !$', 'qb.loadCSS; $ | {ready}', function(loadCSS, $) {
-    loadCSS('/static/css/jquery.jgrowl.css');
-    $.jGrowl('Аааааааааааааааааааааа!!!', {sticky: true});
-  });*/
-
-  /*loader.require('cls: Sync, Events, Collection; qb/dom/View; !$',
-                 'qb: each, Class, Sync, Events, Collection, View; $; def',
-                 function() {
-    console.debug(arguments);
-  });*/
-
   /*----------   Проброс в глобальную область   ----------*/
   merge(qb, {
-    loader: loader,
-    require: loader.require.bind(loader),
+    // Утилиты
     ns: ns,
     merge: merge,
     each: each,
+    when: Deferred.when,
+    signals: signals,
+    // Загрузчик
+    Loader: Loader,
+    loader: loader,
+    require: loader.require.bind(loader),
+    // Классы
     Class: Class,
+    Events: Events,
     Deferred: Deferred,
-    Script: Script,
-    when: Deferred.when
+    Script: Script
   });
 
   window.qb = qb;
