@@ -89,15 +89,34 @@
         return fn.apply(thisObj, prependedArgs ? prependedArgs.concat(args) : args);
       }
     },
-    callAfter: function(otherFn) {
+    delay: function(timeout) {
       var fn = this;
       return function() {
-        otherFn.apply(this, arguments);
-        return fn.apply(this, arguments);
-      }
+        var fnThis = this,
+            fnArgs = arguments;
+        return setTimeout(function() {
+          fn.apply(fnThis, fnArgs);
+        }, timeout);
+      };
     },
-    callBefore: function(otherFn) {
-      return otherFn.callAfter(this);
+    /**
+     * Превращает функцию в "ленивую", т.е. если между двумя вызовами функции прошло меньше timeout,
+     * ее вызов откладывается на timeout.
+     * Полезно использовать в местах, когда функия вызывется очень часто и это ощутимо затормаживает браузер.
+     * Например, хэндлер на ресайз окна: $(window).resize( function() {...}.rare(100) );
+     * @param timeout{Number}  Минимальный интервал между вызовами функции для ее отработки
+     */
+    rare: function(timeout) {
+      var fn = this,
+          timeoutId = null;
+      return function() {
+        var fnThis = this,
+            fnArgs = arguments;
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(function() {
+          fn.apply(fnThis, fnArgs);
+        }, timeout);
+      }
     }
   }, false, true);
 
