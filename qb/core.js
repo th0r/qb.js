@@ -5,12 +5,12 @@
   /**
    * Namespace - функция для создания областей видимости
    * @param path {String} Строка вида "ns.ns1.ns2"
-   * @param [parent=qb] {Object} Опционально. Объект, в котором будут создаваться области видимости.
+   * @param [parent=window] {Object} Опционально. Объект, в котором будут создаваться области видимости.
    * @param [finalObj={}] {Object} Опционально. Объект, который будет записан на место последней области видимости.
    */
   function ns(path, parent, finalObj) {
     var parts = path.split('.'),
-        ns = parent || qb;
+        ns = parent || window;
     for (var i = 0, len = parts.length - 1; i < len; i++) {
       var part = parts[i];
       if (part) {
@@ -18,8 +18,11 @@
       }
     }
     part = parts[i];
-    ns = ns[part] = finalObj || ns[part] || {};
-    return ns;
+    // BUGFIX: тут иногда коробит IE ( window[document] = undefined || window[document] || {}; )
+    try {
+      ns[part] = finalObj || ns[part] || {};
+    } catch(e) {}
+    return ns[part];
   }
 
   /*----------   Основные утилиты   ----------*/
@@ -97,6 +100,9 @@
       return otherFn.callAfter(this);
     }
   }, false, true);
+
+  // Пустая функция
+  function pass() {}
 
   /*----------   Расширение Object   ----------*/
   merge(Object, {
@@ -270,7 +276,8 @@
       return this.substr(0, str.length) === str;
     },
     endsWith: function(str) {
-      return this.substr(-str.length) === str;
+      // BUGFIX: отрицательные индексы не работают в методе substr в IE 7-8
+      return this.slice(-str.length) === str;
     },
     escapeRegexp: function() {
       return this.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
@@ -337,11 +344,11 @@
       merge(constructor, Static, true);
     }
     // Наследование (часть 1)
-    var proto = constructor.fn = constructor.prototype;
     if (Extends) {
       Empty.prototype = Extends.prototype;
-      proto = constructor.prototype = new Empty();
+      constructor.prototype = new Empty();
     }
+    var proto = constructor.fn = constructor.prototype;
     // Примеси
     Implements.forEach(function(Mixin) {
       // Мержим всю ветку прототипов, а не конкретный прототип примеси TODO: 2) правильно ли?
@@ -649,54 +656,107 @@
     }
   });
 
-  var Script = new Class({
-    Name: 'Script',
-    Extends: Deferred,
-    Static: {
-      UNLOADED: 0,
-      LOADING: 1,
-      LOADED: 2,
-      LOAD_ERROR: 3
-    },
+  var STATUS = {
+    UNLOADED: 0,
+    LOADING: 1,
+    LOADED: 2,
+    LOAD_ERROR: 3
+  };
 
-    init: function(url, loadNow) {
+  var LoadingElement = new Class({
+    Name: 'Element',
+    Extends: Deferred,
+
+    init: function(url) {
       Deferred.call(this);
-      this.src = url;
+      this.url = url;
       this.elem = null;
-      this.status = Script.UNLOADED;
-      if (loadNow) {
-        this.load();
-      }
+      this.status = STATUS.UNLOADED;
     },
     load: function() {
-      if (this.status === Script.UNLOADED) {
-        this.status = Script.LOADING;
-        var elem = this.elem = document.createElement('script');
-        this._bindLoadHandler();
-        elem.src = this.src;
-        HEAD_ELEM.appendChild(elem);
+      if (this.status === STATUS.UNLOADED) {
+        this.status = STATUS.LOADING;
+        this._createElem();
       }
+    },
+    _createElem: function() {
+      throw 'Перегрузите этот метод. Здесь должен создаваться DOM-элемент';
+    },
+    resolve: function() {
+      this.status = STATUS.LOADED;
+      Deferred.fn.resolve.call(this, this);
+    },
+    reject: function() {
+      this.status = STATUS.LOAD_ERROR;
+      Deferred.fn.reject.apply(this, arguments);
+    }
+  });
+
+  var Stylesheet = new Class({
+    Name: 'Stylesheet',
+    Extends: LoadingElement,
+    Static: STATUS,
+
+    init: function(url) {
+      LoadingElement.call(this, url);
+      this.img = null;
+    },
+    _createElem: function() {
+      // BUGFIX: Для браузеров, которые не поддерживают onload на <link/>, используем метод с картинкой
+      // (http://stackoverflow.com/questions/2635814/javascript-capturing-load-event-on-link/5371426#5371426)
+      var link = this.elem = document.createElement('link'),
+          img = this.img = document.createElement('img'),
+          url = this.url,
+          resolve = this.resolve.bind(this);
+      link.type = 'text/css';
+      link.rel = 'stylesheet',
+      link.href = url;
+      img.onerror = link.onload = resolve;
+      HEAD_ELEM.appendChild(img);
+      img.src = url;
+      HEAD_ELEM.appendChild(link);
+    },
+    resolve: function() {
+      var link = this.elem,
+          img = this.img;
+      link.onload = img.onerror = null;
+      // BUGFIX: Удаляем src, иначе IE8 показывает, что грузит эту мнимую картинку
+      img.removeAttribute('src');
+      img.parentNode.removeChild(img);
+      LoadingElement.fn.resolve.call(this);
+    },
+    toString: function() {
+      return 'Stylesheet [{}]'.format(this.url);
+    }
+  });
+
+  var Script = new Class({
+    Name: 'Script',
+    Extends: LoadingElement,
+    Static: STATUS,
+
+    init: function(url) {
+      LoadingElement.call(this, url);
+    },
+    _createElem: function() {
+      var script = this.elem = document.createElement('script');
+      this._bindLoadHandler();
+      script.src = this.url;
+      HEAD_ELEM.appendChild(script);
     },
     resolve: function() {
       var elem = this.elem;
       elem.onreadystatechange = elem.onload = elem.onerror = null;
-      this.status = Script.LOADED;
-      Deferred.fn.resolve.call(this, this);
-    },
-    reject: function() {
-      this.status = Script.LOAD_ERROR;
-      Deferred.fn.reject.apply(this, arguments);
+      LoadingElement.fn.resolve.call(this);
     },
     deferLoad: function() {
       var elem = this.elem;
       elem.onreadystatechange = elem.onload = null;
     },
     _bindLoadHandler: function() {
-      var self = this,
-          elem = this.elem,
+      var elem = this.elem,
           loaded = this.resolve.bind(this);
       elem.onreadystatechange = function() {
-        console.log( '"{0}": readyState = "{1}"'.format([self.src, this.readyState]) );
         if (this.readyState == 'loaded' || this.readyState == 'complete') {
           loaded();
         }
@@ -705,11 +765,9 @@
       elem.onerror = this.reject.bind(this);
     },
     toString: function() {
-      return 'Script [{}]'.format(this.src);
+      return 'Script [{}]'.format(this.url);
     }
   });
-  // Чисто для удобства восприятия
-  Script.prototype.onload = Script.prototype.done;
 
   /**
    * Нормализует строку запроса (удаляет все пробельные символы)
@@ -748,20 +806,20 @@
     Name: 'Handler',
     Extends: Deferred,
 
-    init: function(loader, scripts, exports) {
+    init: function(loader, resources, exports) {
       Deferred.call(this);
 
-      this.scripts = scripts;
+      this.resources = resources;
       this.loader = loader;
       this.args = exports ? exports.args : null;
       this.flags = exports ? exports.flags : null;
-      Deferred.when.apply(null, scripts).then(
+      Deferred.when.apply(null, resources).then(
           this._parseArgs.bind(this),
           this._handleLoadError
       );
     },
     load: function() {
-      this.scripts.forEachCall('load');
+      this.resources.forEachCall('load');
     },
     // Переопределяет метод Deferred
     _callDeferredCallbacks: function(callbacks) {
@@ -786,7 +844,7 @@
         args = this.loader.exportShortcuts.replaceIn(args);
         splitQuery(args).forEach(function(part) {
           splitPart(part, '.').forEach(function(_export) {
-            this.push( ns(_export, window) );
+            this.push( ns(_export) );
           }, result);
         });
       }
@@ -811,11 +869,11 @@
       this.rootUrl = rootUrl.toLowerCase();
       this.queryShortcuts = new Shortcuts(',.:;/!}');
       this.exportShortcuts = new Shortcuts(',.:;');
-      this.scripts = {};
+      this.resources = {};
     },
     require: function(query/*, exports*/, callback/*, module*/) {
       var self = this,
-          scripts = this.scripts,
+          resources = this.resources,
           module = arguments[arguments.length-1];
       if (!Function.is(callback)) {
         var exports = callback;
@@ -824,7 +882,7 @@
       var callbacks = [callback];
       // Если указано название модуля, значит в модуле используется require и нужно отложить загрузку скрипта
       if (typeof module === 'string') {
-        module = scripts[this._normalizeUrl(module)];
+        module = resources[this._normalizeScriptUrl(module)];
         module.deferLoad();
         callbacks.push( module.resolve.bind(module) );
       }
@@ -846,22 +904,15 @@
       handlers[0].load();
     },
     _getLoadHandler: function(urls, exports) {
-      var scripts = this.scripts,
-          requiredScripts = urls.map(function(url) {
-            return ( scripts[url] = scripts[url] || new Script(url) );
-          });
-      return new Handler(this, requiredScripts, exports);
+      var resources = this.resources,
+          required = urls.map(function(url) {
+            return ( resources[url] = resources[url] || new (this._isStylesheet(url) ? Stylesheet : Script)(url) );
+          }, this);
+      return new Handler(this, required, exports);
     },
     _parseQuery: function(query) {
-      if (typeof query === 'string') {
-        query = this.queryShortcuts.replaceIn( normalizeQuery(query) );
-        var replaced = true,
-            parts = splitQuery(query);
-      } else {
-        replaced = false;
-        parts = query;
-      }
-      var urls = {},
+      var parts = (typeof query === 'string') ? splitQuery( normalizeQuery(query) ) : query,
+          urls = {},
           fullUrl = Loader.FULL_URL;
       parts.forEach(function(part) {
         if (part) {
@@ -871,9 +922,7 @@
           if ( fullUrl.test(_part) ) {
             urls[_part] = url.priority;
           } else {
-            if (!replaced) {
-              part = this.queryShortcuts.replaceIn(part);
-            }
+            part = this.queryShortcuts.replaceIn(part);
             merge(urls, this._parsePart(part));
           }
         }
@@ -881,13 +930,14 @@
       return this._prioritizeUrls(urls);
     },
     _parsePart: function(part) {
-      var chunks = splitPart(part, '/'),
-          scripts = {};
+      var chunks = splitPart(part.toLowerCase(), '/'),
+          urls = {};
       chunks.forEach(function(chunk) {
-        var url = this._parsePriority(chunk);
-        scripts[this._normalizeUrl(url.part)] = url.priority;
+        var info = this._parsePriority(chunk),
+            url = this._isStylesheet(info.part) ? info.part : this._normalizeScriptUrl(info.part);
+        urls[url] = info.priority;
       }, this);
-      return scripts;
+      return urls;
     },
     _parsePriority: function(part) {
       var priority = null;
@@ -918,6 +968,7 @@
       }
     },
     _normalizePart: function(part) {
+      part = part.toLowerCase();
       if ( part.startsWith('//') ) {
         part = window.location.protocol + part;
       } else if ( part.startsWith('www.') ) {
@@ -925,12 +976,11 @@
       }
       return part;
     },
-    _normalizeUrl: function(url) {
-      url = url.toLowerCase();
-      if (!url.endsWith('.js')) {
-        url += '.js';
-      }
-      return this.rootUrl + url;
+    _normalizeScriptUrl: function(url) {
+      return this.rootUrl + url.toLowerCase() + '.js';
+    },
+    _isStylesheet: function(url) {
+      return url.endsWith('.css');
     },
     _prioritizeUrls: function(urls) {
       var result = [];
@@ -958,7 +1008,8 @@
   var loader = new Loader(rootJS);
   loader.queryShortcuts.add({
     '$': 'jquery',
-    'cls': 'qb/classes'
+    'CLS': 'qb/classes',
+    'CSS': '/static/css'
   });
   loader.exportShortcuts.add({
     'win': 'window',
@@ -972,6 +1023,7 @@
     ns: ns,
     merge: merge,
     each: each,
+    pass: pass,
     when: Deferred.when,
     signals: signals,
     // Загрузчик

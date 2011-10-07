@@ -5,12 +5,12 @@ test('ns', 9, function() {
   var obj = {},
       res;
 
-  res = qb.ns('test');
+  res = qb.ns('test', qb);
   strictEqual( res, qb.test, "qb.ns('test') === qb.test" );
   deepEqual( qb.test, {}, "qb.ns('test') - qb.test - пустой объект" );
   delete qb.test;
 
-  res = qb.ns('test.shit');
+  res = qb.ns('test.shit', qb);
   strictEqual( res, qb.test.shit, "qb.ns('test.shit') === qb.test.shit" );
   deepEqual( qb.test, { shit: {} }, "qb.ns('test.shit') - qb.test является объектом { shit: {} }" );
   delete qb.test;
