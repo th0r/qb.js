@@ -278,7 +278,13 @@
   fromProtoToStatic(Array, ['slice', 'splice']);
 
   /*----------   Расширение String   ----------*/
-  var reFormatReplace = /\{(\w*)\}/g;
+  var reFormatReplace = /\{(\w*)\}/g,
+      parseObj = {
+        'true': true,
+        'false': false,
+        'null': null,
+        'NaN': NaN
+      };
 
   merge(String.prototype, {
     contains: Array.prototype.contains,
@@ -300,10 +306,35 @@
     },
     escapeRegexp: function() {
       return this.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+    },
+    /**
+     * Преобразует строку в примитивы
+     * ('null' -> null; 'true' -> true и т.д.)
+     */
+    parse: function() {
+      var str = '' + this;
+      if (str === 'undefined') {
+        return undefined;
+      }
+      var result = parseObj[this];
+      if (result === undefined) {
+        result = +this;
+        if (isNaN(result)) {
+          result = str;
+        }
+      }
+      return result;
     }
   }, false, true);
 
   /*----------   Расширение Date   ----------*/
+  merge(Date, {
+    isDate: function(obj) {
+      return ( toString(obj) == '[object Date]' );
+    }
+  }, false, true);
+  Date.is = Date.isDate;
+
   merge(Date.prototype, {
     now: function() {
       return +new Date();
