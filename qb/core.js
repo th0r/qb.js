@@ -305,7 +305,7 @@
       return this.slice(-str.length) === str;
     },
     escapeRegexp: function() {
-      return this.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      return this.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&');
     },
     /**
      * Преобразует строку в примитивы
@@ -329,17 +329,14 @@
 
   /*----------   Расширение Date   ----------*/
   merge(Date, {
+    now: function() {
+      return +new Date();
+    },
     isDate: function(obj) {
       return ( toString(obj) == '[object Date]' );
     }
-  }, false, true);
+  }, false, true),
   Date.is = Date.isDate;
-
-  merge(Date.prototype, {
-    now: function() {
-      return +new Date();
-    }
-  }, false, true);
 
   /*----------   Дополнительные утилиты   ----------*/
   function each(obj, fn/*, onlyOwn=false*/) {

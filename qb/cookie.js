@@ -13,8 +13,9 @@
     var cookies = {};
     document.cookie.split('; ').forEach(function(part) {
       var ind = part.indexOf('='),
-          value = decode( part.substr(ind+1) );
-      cookies[decode( part.substr(0, ind) )] = parse ? value.parse() : value;
+          key = (ind > -1) ? decode( part.substr(0, ind) ) : part,
+          value = (ind > -1) ? decode( part.substr(ind+1) ) : '';
+      cookies[key] = parse ? value.parse() : value;
     });
     return cookies;
   }
@@ -26,10 +27,10 @@
    * @returns  Возвращает undefined, если такого ключа в куках нет или его значение, если он есть
    */
   function get(key, parse) {
-    var regex = new RegExp(';\\s' + encode(key).escapeRegexp() + '=(.*?);'),
+    var regex = new RegExp(';\\s' + encode(key).escapeRegexp() + '(?:=(.*?))?;'),
         result = regex.exec('; ' + document.cookie + ';');
     if (result) {
-      result = decode(result[1]);
+      result = decode(result[1] || '');
       return parse ? result.parse() : result;
     }
     return undefined;
@@ -64,7 +65,8 @@
    * @param {String} key  Ключ удаляемой куки
    */
   function remove(key) {
-    set(key, '', 0);
+    // Отнимаем день от текущей даты
+    set(key, ' ', new Date( Date.now() - 864e5 ) );
   }
 
   /**
