@@ -4,9 +4,9 @@
 
   /**
    * Namespace - функция для создания областей видимости
-   * @param path {String} Строка вида "ns.ns1.ns2"
-   * @param [parent=window] {Object} Опционально. Объект, в котором будут создаваться области видимости.
-   * @param [finalObj={}] {Object} Опционально. Объект, который будет записан на место последней области видимости.
+   * @param {String} path  Строка вида "ns.ns1.ns2"
+   * @param {Object} [parent=window]  Опционально. Объект, в котором будут создаваться области видимости.
+   * @param {Object} [finalObj={}]  Опционально. Объект, который будет записан на место последней области видимости.
    */
   function ns(path, parent, finalObj) {
     var parts = path.split('.'),
@@ -67,7 +67,7 @@
   /*----------   Расширение Function   ----------*/
   merge(Function, {
     isFunction: function(obj) {
-      return ( toString(obj) == '[object Function]' );
+      return ( toString(obj) === '[object Function]' );
     },
     check: function(obj) {
       return Function.is(obj) ? obj : false;
@@ -89,38 +89,40 @@
         return fn.apply(thisObj, prependedArgs ? prependedArgs.concat(args) : args);
       }
     },
-    delay: function(timeout) {
-      var fn = this;
-      return function() {
-        var fnThis = this,
-            fnArgs = arguments;
-        return setTimeout(function() {
-          fn.apply(fnThis, fnArgs);
-        }, timeout);
-      };
-    },
     /**
      * Превращает функцию в "ленивую", т.е. если между двумя вызовами функции прошло меньше timeout,
      * ее вызов откладывается на timeout.
-     * Полезно использовать в местах, когда функия вызывется очень часто и это ощутимо затормаживает браузер.
-     * Например, хэндлер на ресайз окна: $(window).resize( function() {...}.rare(100) );
-     * @param timeout{Number}  Минимальный интервал между вызовами функции для ее отработки
+     * Полезно использовать в местах, когда "дорогая" функия вызывется очень часто и это ощутимо затормаживает браузер.
+     * Например, хэндлер на ресайз окна: $(window).resize( function() {...}.lazy(100) );
+     * @param {Number} timeout  Минимальный интервал между вызовами функции для ее отработки
+     * @returns {Function}      Возвращает "ленивую" функцию, у которой есть 2 метода:
+     *                            reset() - отменяет запланированный вызов функции
+     *                            exec() - принудительно немедленно вызывает функцию (отменяя запланированную)
      */
-    rare: function(timeout) {
+    lazy: function(timeout) {
       var fn = this,
           timeoutId = null;
-      return function() {
+      function lazy() {
         var fnThis = this,
             fnArgs = arguments;
-        clearTimeout(timeoutId);
+        reset();
         timeoutId = setTimeout(function() {
           fn.apply(fnThis, fnArgs);
         }, timeout);
       }
+      function reset() { clearTimeout(timeoutId) }
+      lazy.reset = reset;
+      lazy.exec = function() {
+        reset();
+        fn.apply( (this === lazy ? null : this), arguments);
+      };
+      return lazy;
     }
   }, false, true);
 
-  // Пустая функция
+ /**
+  * Пустая функция
+  */
   function pass() {}
 
   /*----------   Расширение Object   ----------*/
@@ -148,7 +150,7 @@
   /*----------   Расширение Array   ----------*/
   merge(Array, {
     isArray: function(obj) {
-      return ( toString(obj) == '[object Array]' );
+      return ( toString(obj) === '[object Array]' );
     },
     from: function(obj) {
       if (Array.is(obj)) {
@@ -304,6 +306,9 @@
       // BUGFIX: отрицательные индексы не работают в методе substr в IE 7-8
       return this.slice(-str.length) === str;
     },
+    capitalize: function() {
+      return this.substr(0, 1).toUpperCase() + this.substr(1);
+    },
     escapeRegexp: function() {
       return this.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&');
     },
@@ -333,7 +338,7 @@
       return +new Date();
     },
     isDate: function(obj) {
-      return ( toString(obj) == '[object Date]' );
+      return ( toString(obj) === '[object Date]' );
     }
   }, false, true),
   Date.is = Date.isDate;
@@ -438,12 +443,15 @@
       }
     },
    /**
-    * Добавляет хэндлеры на события
-    * Также можно вызывать так: addEvents(eventsObj, [triggerOnce]),
-    * где eventsObj = {<name>: <handler>, ...}
-    * @param {String} name  Имя события
-    * @param handler  Обработчик (слушатель) события
-    * @param {Boolean} [triggerOnce=false]  Вызвать данный обработчик только один раз. Опционально.
+    * Добавляет обработчики на события. Поддерживает области видимости (NS).
+    * Области видимости указываются через точку после названия события: 'click.some-namespace'.
+    * Их можно использовать для последующего удобного (возможно массового) удаления навешанных хэндлеров (см. removeEvents).
+    * Способы вызова:
+    *   - addEvents(name, handler, [triggerOnce])
+    *   - addEvents(eventsObj, [triggerOnce]), где eventsObj = {<name>: <handler>, ...}
+    * @param {String} name  Имя события.
+    * @param {Function} handler  Обработчик (слушатель) события.
+    * @param {Boolean} [triggerOnce=false]  Опционально. Вызвать данный обработчик только один раз (затем удалить).
     */
     addEvents: function(name, handler, triggerOnce) {
       if (typeof name === 'string') {
@@ -465,6 +473,17 @@
         });
       }
     },
+   /**
+    * Удаляет обработчики событий. Поддерживает области видимости (NS).
+    * Можно использовать следующими способами:
+    *   - removeEvents('click', handlerFn) --> удаляет обработчик handlerFn из NS по-умолчанию ('default')
+    *   - removeEvents('click.some-namespace', handlerFn) --> удаляет обработчик handlerFn из NS 'some-namespace'
+    *   - removeEvents('click') --> удаляет обработчики события 'click' из всех NS
+    *   - removeEvents('click.some-namespace') --> удаляет все обработчики события 'click' из NS 'some-namespace'
+    *   - removeEvents('.some-namespace') --> удаляет все обработчики из NS 'some-namespace'
+    * @param {String} name  Имя или паттерн (см. описание), указывающий на обработчики, которые нужно удалить.
+    * @param {Function} [handler]  Опционально. Обработчик, который нужно удалить.
+   */
     removeEvents: function(name, handler) {
       var info = getEventInfo(name),
           ns = info.ns,
@@ -479,6 +498,7 @@
       } else if (!name) {
         delete events[ns];
       } else if (ns = events[ns]) {
+        // Если указано 'click.someNS' и handler, то удаляем этот хэндлер на click из этой ns
         if (handler) {
           var handlers = ns[name];
           if (handlers && handlers.length) {
@@ -495,9 +515,16 @@
         }
       }
     },
-    triggerEvent: function(name/*, args=null, thisObj=self*/) {
-      var args = arguments[1] || [],
-          thisObj = (arguments.length > 2) ? arguments[2] : this;
+   /**
+    * Триггерит указанное событие.
+    * Здесь использовать NS нельзя, т.е. вызываются обработчики из всех областей видимости.
+    * @param {String} name  Имя вызываемого события (например, 'click').
+    * @param {Array} [args=[]]  Опционально. Аргументы, с которыми будет вызван каждый обработчик.
+    * @apram [thisObj=self]  Опционально. Объект, который станет this в обработчиках.
+    */
+    triggerEvent: function(name, args, thisObj) {
+      args = args || [],
+      thisObj = (arguments.length > 2) ? arguments[2] : this;
       each(this.$events, function(ns) {
         var handlers = ns[name];
         if (handlers && handlers.length) {
@@ -642,29 +669,103 @@
     }
   });
 
-  /*----------   Новый загрузчик   ------------*/
-  /**
-   *    1) Загрузка скриптов из root-js директории (расширение ".js" можно опускать - если его нет, оно добавится автоматически):
-   *      'jquery/widgets: widget1, widget2, widget3; qb/classes: Collection, Events, Lazy;'
-   *    2) Загрузка скриптов не из-под root-js или извне.
-   *       В данном случае обработка урлов не проходит - в них не ищутся шорткаты, пакеты (см. ниже) и не добавляется расширение ".js"
-   *      'http://domain/a.js; https://domain/b.js; www.domain.com/c.js; //domain.com/d.js; /static/other-js/c.js'
-   * TODO: 3) Загрузка приоритетных скриптов:
-   *       Такие скрипты будут загружены первыми из списка.
-   *       Полезно, например, при загрузке jquery и плагинов к нему (jquery должен быть загружен перед плагинами).
-   *       Для этого перед названием скрипта нужно поставить знак "!"
-   *      '!jquery; jquery/plugins: jquery.form; jquery.ui
+
+  /*   *** Загрузчик ресурсов ***
    *
-   *    Также существуют шоткаты и пакеты.
-   *    Шоткат - сокращение какой-нибудь части запроса, например для шотката '$ = jquery':
-   *    '!$; $/plugins: $.form, $.ui' => '!jquery; jquery/plugins: jquery.form, jquery.ui'
-   *    Последовательность символов является шоткатом, если она окружена спец-символами [!,;:./] или началом/концом строки
-   *    Шоткатом может быть любая строка - она будет подставлена в запрос без преобразований.
+   *    qb.js - модульная библиотека, т.е. для ее использования на страницу достаточно поместить только скрипт "core.js",
+   *    а с его помощью уже грузить остальные необходимые ресурсы: модули (скрипты) и файлы стилей (css).
    *
-   *    Пакет - короткое название для нескольких скриптов, например 'qb.ClassesFull' = 'qb/classes: Collection, Events, Lazy, Sync'
-   *    Пакеты определяются после подставления всех шоткатов.
-   *    Последовательность символов является пакетом, если она окружена символами [;,] или началом/концом строки
+   *    Для этого служит класс qb.Loader (см. ниже).
+   *    Конструктор загрузчика требует один параметр rootUrl - это урл (полный, относительный или абсолютный), по которому лежат
+   *    все скрипты сайта (например, '/static/js/'). Он должен заканчиваться символом '/'.
+   *    В состав библиотеки уже входит один загрузчик - qb.loader.
+   *    rootUrl для него определяется автоматически исходя из того, где находится данный скрипт (core.js): <rootUrl>/qb/core.js
+   *    Для удобства предположим, что вся статика находится в "/static", скрипты - в "/static/js", а стили - в "/static/css", тогда
+   *    rootUrl загрузчика qb.loader будет "/static/js/".
    *
+   *    Для загрузки ресурсов используется метод require загрузчика. Для загрузчика по-умолчанию (qb.loader) он напрямую вынесен
+   *    в объект qb: qb.loader.require === qb.require. Это сделано для удобства.
+   *
+   *    Для использования данного метода, ему нужно передать строку запроса ресурсов или же массив частей строки запроса (см. ниже).
+   *    Части запроса отделяются друг от друга символом точки с запятой (;).
+   *
+   *    Пример простого запроса:
+   *      qb.require('qb/cookie', callbackFn) ==> загрузит модуль (скрипт) '/static/js/qb/cookie.js' и после этого вызовет callbackFn
+   *    Здесь 'qb/cookie' - строка запроса, а callbackFn - обязательная функция, которая будет вызвана после загрузки данного модуля.
+   *
+   *    В строке запроса можно указывать не только пути относительно rootUrl, но и абсолютные пути к ресурсам.
+   *    Путь считается абсолютным, если он начинается с '/', '//', 'http://', 'https://' или 'www.'
+   *    'qb/cookie; /static/other-js/widget.js; /static/css/widget.css'
+   *    При использовании относительных и абсолютных путей существуют некоторые отличия:
+   *      1) Во время формирования урла в случае относительного пути ('qb/cookie') к нему всегда дописывается расширение '.js',
+   *         т.е. таким методом можно загружать только скрипты. В абсолютных урлах необходимо указывать полный путь до ресурса,
+   *         включая расширение.
+   *      2) Шорткаты обрабатываются только в относительных урлах (см. описание шорткатов ниже). Несмотря на это, можно создать
+   *         шорткат, например, 'CSS' = '/static/css' и загружать стили так: 'CSS/extra-style.css'. Это работает, так как до замены
+   *         шорткатов данный урл считается относительным (не начинается с '/' и т.д.)
+   *    Абсолютные пути нормализуются, т.е. для урлов, начинающихся с '//' и 'www.', к ним будет добавлен текущий протокол (http или https)
+   *
+   *    Пример строки запроса из нескольких частей (загрузка нескольких ресурсов):
+   *      'jquery; qb/cookie' ==> загрузка '/static/js/jquery.js' и '/static/js/qb/cookie.js'.
+   *    Вместо данной строки запроса можно было передать массив из ее частей:
+   *      ['jquery', 'qb/cookie'] === 'jquery; qb/cookie'
+   *
+   *    Скрипты для загрузки в строке запроса можно группировать, используя символ двоеточия:
+   *      'qb/classes: Lazy, Collection; jquery' ==> '<root>/qb/classes/Collection.js' + '<root>/qb/classes/Lazy.js' + '<root>/jquery.js'
+   *
+   *    *** Шорткаты ***
+   *    В частях запроса можно использовать шорткаты - сокращения запроса.
+   *    Например, в состав qb.loader входит шорткат "$", который при разборе запроса заменяется на "jquery".
+   *    Пример:
+   *      '$; $/plugins/growl; $.ui' === 'jquery; jquery/plugins/growl; jquery.ui'
+   *    Все шорткаты для строк запроса содержатся в свойстве queryShortcuts объекта загрузчика (qb.loader.queryShortcuts).
+   *    Это объект класса Shortcuts (см. код ниже). Для добавления в него шорткатов используется метод add:
+   *      qb.loader.queryShortcuts.add({
+   *        'CLS': 'qb/classes',
+   *        'main': 'qb: cookie, classes/Collection; jquery'
+   *      });
+   *    Есть несколько правил использования шорткатов:
+   *      1) Шорткаты регистро-зависимы. Т.е. 'cls' и 'CLS' - разные шорткаты.
+   *      2) В описании шортката нельзя использовать другие шорткаты (они не заменятся).
+   *      3) Шорткаты в строке запроса заменяются только в случае, если они окружены спец-символами ,.:;/!}
+   *         или находятся в начале/конце строки запроса.
+   *
+   *    *** Очередь загрузки ***
+   *    Для ресурсов в строке запроса можно указать очередность их загрузки. Для этого перед путем к ресурсу нужно указать
+   *    его номер в очереди загружаемых ресурсов.
+   *    Пример:
+   *      '{1}CSS/growl.css; {2}$.ui; {1}$; {2}$/plugins/growl; {3}$.ui/plugins/some-widget; qb/cookie'
+   *    В этом случае, порядок загрузки ресурсов можно описать так:
+   *      1) jquery.js + growl.css
+   *      2) jquery.ui.js + jquery/plugins/growl.js
+   *      3) jquery.ui/plugins/some-widget.js
+   *      4) qb/cookie.js
+   *    Ресурсы, у которых не установлена очередность, загружаются последними.
+   *    Вместо указания очередности "{1}" можно указывать знак "!" (это сделано для удобства)
+   *
+   *    *** Строка экспорта ***
+   *    После загрузки всех указанных в строке запроса ресурсов обязательно вызывается callback.
+   *    Для удобства, в него в качестве параметров можно пробросить указанные в строке экспорта объекты (указание
+   *    строки экспорта - опционально).
+   *    Пример:
+   *      qb.require('$; qb: cookie, classes/Collection', '$; window.location; qb: Class, cookie, Collection; qb; document; window',
+   *                 function($, location, Class, cookie, Collection, qb, document, window) {...});
+   *    Строка экспорта многим похожа на строку запроса: в ней так же можно использовать группировку и шорткаты.
+   *    Шорткаты экспорта находятся в объекте exportShortcuts загрузчика (qb.loader.exportShortcuts).
+   *    Для их добавления так же используется метод "add".
+   *    При использовании шорткатов экспорта действуют все те же правила, что и для шорткатов запроса.
+   *    Различаются только спец-символы - для шорткатов экспорта это ,.:;
+   *
+   *    Также в строке экспорта можно использовать флаги. Сейчас поддерживается один флаг - "ready".
+   *    Если он указан, callback будет вызван только после загрузки всех ресурсов И после загрузки
+   *    страницы (аналог $(document).ready() ).
+   *    Флаги указываются следующим образом (показана строка экспорта):
+   *      '<export_string> | {flag1, flag2...flagN}'
+   *    Пример:
+   *      '$; $.growl | {ready}'
+   *
+   *    Также есть возможность в строке экспорта указать ТОЛЬКО флаги. Тогда она будет выглядеть так:
+   *      '{ready}'
    */
 
   var HEAD_ELEM = document.getElementsByTagName('head')[0];
@@ -796,6 +897,10 @@
       elem.onreadystatechange = elem.onload = elem.onerror = null;
       LoadingElement.fn.resolve.call(this);
     },
+    reject: function(message, file, line) {
+      var errorMsg = 'Error on line {1}: "{0}"'.format([message, line]);
+      LoadingElement.fn.reject.call(this, errorMsg);
+    },
     deferLoad: function() {
       var elem = this.elem;
       elem.onreadystatechange = elem.onload = null;
@@ -885,21 +990,21 @@
     },
     _parseArgs: function() {
       var args = this.args,
-          result = [];
+          exports = [];
       if (args) {
         // Заменяем шорткаты
         args = this.loader.exportShortcuts.replaceIn(args);
         splitQuery(args).forEach(function(part) {
           splitPart(part, '.').forEach(function(_export) {
             this.push( ns(_export) );
-          }, result);
+          }, exports);
         });
       }
-      this.resolve.apply(this, result);
+      this.resolve.apply(this, exports);
     },
-    _handleLoadError: function(script, message, file, line) {
+    _handleLoadError: function(resource, error) {
       this.reject.apply(this, arguments);
-      throw 'Не удалось загрузить скрипт "{1}":\n  Ошибка на строке {2}: "{0}"'.format([message, file, line]);
+      throw 'Failed to load resource "{0}"\nError: "{1}"'.format(arguments);
     }
   });
 
@@ -949,6 +1054,7 @@
         handler.done(next ? function() { next.load() } : callbacks);
       }, handlers);
       handlers[0].load();
+      return handlers.last();
     },
     _getLoadHandler: function(urls, exports) {
       var resources = this.resources,
@@ -1019,7 +1125,7 @@
       if ( part.startsWith('//') ) {
         part = window.location.protocol + part;
       } else if ( part.startsWith('www.') ) {
-        part = 'http://' + part;
+        part = window.location.protocol + part;
       }
       return part;
     },

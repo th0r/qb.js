@@ -9,7 +9,7 @@
    *                           Опционально.
    * @returns {Object}  Объект вида {'key': 'value', ...}
    */
-  function getCookies(parse) {
+  function getAll(parse) {
     var cookies = {};
     document.cookie.split('; ').forEach(function(part) {
       var ind = part.indexOf('='),
@@ -66,7 +66,7 @@
    */
   function remove(key) {
     // Отнимаем день от текущей даты
-    set(key, ' ', new Date( Date.now() - 864e5 ) );
+    set(key, '', new Date( Date.now() - 864e5 ) );
   }
 
   /**
@@ -74,14 +74,14 @@
    * @returns {Boolean}  Возвращает true, если после очистки document.cookie пуст
    */
   function clear() {
-    each( getCookies(), function(value, key) {
+    each( getAll(), function(value, key) {
       remove(key);
     });
     return !document.cookie;
   }
 
   qb.cookie = {
-    all: getCookies,
+    all: getAll,
     get: get,
     set: set,
     remove: remove,
