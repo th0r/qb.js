@@ -975,18 +975,12 @@
     },
     // Переопределяет метод Deferred
     _callDeferredCallbacks: function(callbacks) {
-      var flags = this.flags;
-      if (flags && flags.ready) {
-        var thisObj = this.$with,
-            args = this.$args;
-        Array.from(callbacks).forEach(function(callback) {
-          this(function() {
-            callback.apply(thisObj, args);
-          });
-        }, window.$);
-      } else {
-        Deferred.fn._callDeferredCallbacks.call(this, callbacks);
-      }
+      var flags = this.flags,
+          _super = Deferred.fn._callDeferredCallbacks.bind(this, callbacks);
+      flags && flags.ready ?
+        window.$(function() {
+          _super();
+        }) : _super();
     },
     _parseArgs: function() {
       var args = this.args,
