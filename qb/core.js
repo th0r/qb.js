@@ -967,7 +967,7 @@
       this.flags = exports ? exports.flags : null;
       Deferred.when.apply(null, resources).then(
           this._parseArgs.bind(this),
-          this._handleLoadError
+          this._handleLoadError.bind(this)
       );
     },
     load: function() {
@@ -1003,7 +1003,7 @@
       this.resolve.apply(this, exports);
     },
     _handleLoadError: function(resource, error) {
-      this.reject.apply(this, arguments);
+      this.reject(resource, error);
       throw 'Failed to load resource "{0}"\nError: "{1}"'.format(arguments);
     }
   });
