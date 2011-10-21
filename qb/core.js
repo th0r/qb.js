@@ -40,9 +40,16 @@
     }
   };
 
-  function merge(to, from/*, onlyOwn=false, keepExisting=false*/) {
-    var onlyOwn = arguments[2],
-        keepExisting = arguments[3];
+  /**
+   * Копирует атрибуты из одного объекта в другой
+   * @param {Object} to  Объект, в который нужно скопировать свойства
+   * @param {Object} from  Объект, из которого нужно скопировать свойства
+   * @param {Boolean} [onlyOwn=false]  Опционально. Если true, то будет копироваться только личные атрибуты
+   *                                   объекта from (from.hasOwnProperty() === true)
+   * @param {Boolean} [keepExisting=false]  Опционально. Если true, то атрибут из from будет копироваться в to
+   *                                        только если его там еще нет.
+   */
+  function merge(to, from, onlyOwn, keepExisting) {
     for (var prop in from) {
       if (!onlyOwn || onlyOwn && from.hasOwnProperty(prop)) {
         if (!keepExisting || keepExisting && !(prop in to)) {
@@ -185,19 +192,14 @@
       }
       return -1;
     },
-    forEach: function(callback/*, thisObj=window*/) {
-      var len = this.length;
-      if (len) {
-        var thisObj = arguments[1];
-        for (var i = 0; i < len; i++) {
-          callback.call(thisObj, this[i], i, this);
-        }
+    forEach: function(callback, thisObj) {
+      for (var i = 0, len = this.length; i < len; i++) {
+        callback.call(thisObj, this[i], i, this);
       }
       return this;
     },
-    filter: function(callback/*, thisObj=window*/) {
-      var thisObj = arguments[1],
-          res = [];
+    filter: function(callback, thisObj) {
+      var res = [];
       for (var i = 0, len = this.length; i < len; i++) {
         var val = this[i];
         if (callback.call(thisObj, val, i, this)) {
@@ -206,16 +208,14 @@
       }
       return res;
     },
-    map: function(callback/*, thisObj=window*/) {
-      var thisObj = arguments[1],
-          res = [];
+    map: function(callback, thisObj) {
+      var res = [];
       for (var i = 0, len = this.length; i < len; i++) {
         res[i] = callback.call(thisObj, this[i], i, this);
       }
       return res;
     },
-    every: function(callback/*, thisObj=window*/) {
-      var thisObj = arguments[1];
+    every: function(callback, thisObj) {
       for (var i = 0, len = this.length; i < len; i++) {
         if (!callback.call(thisObj, this[i], i, this)) {
           return false;
@@ -223,8 +223,7 @@
       }
       return true;
     },
-    some: function(callback/*, thisObj=window*/) {
-      var thisObj = arguments[1];
+    some: function(callback, thisObj) {
       for (var i = 0, len = this.length; i < len; i++) {
         if (callback.call(thisObj, this[i], i, this)) {
           return true;
@@ -245,12 +244,26 @@
         this.push(item);
       }
     },
-    remove: function(item/*, fromEnd=false*/) {
-      var i = this[arguments[1] ? 'lastIndexOf' : 'indexOf'](item);
+    /**
+     * Удаляет один указанный элемент из массива (по строгому соответствию).
+     * Модифицируется исходный массив.
+     * @param item  Удаляемый элемент.
+     * @param {Boolean} [fromEnd=false]  Опционально. Искать элемент с конца.
+     * @returns {Array}  Модифицированный исходный массив.
+     */
+    remove: function(item, fromEnd) {
+      var i = this[fromEnd ? 'lastIndexOf' : 'indexOf'](item);
       if (i >= 0) {
         this.splice(i, 1);
       }
+      return this;
     },
+    /**
+     * Удаляет все указанные элементы из массива (по строгому соответствию).
+     * Модифицируется исходный массив.
+     * @param item  Удаляемый элемент.
+     * @returns {Array}  Модифицированный исходный массив.
+     */
     erase: function(item) {
       var i = this.length;
       while (i--) {
@@ -258,6 +271,7 @@
           this.splice(i, 1);
         }
       }
+      return this;
     },
     clean: function() {
       return this.filter(function(item) {
@@ -344,10 +358,14 @@
   Date.is = Date.isDate;
 
   /*----------   Дополнительные утилиты   ----------*/
-  function each(obj, fn/*, onlyOwn=false*/) {
-    var onlyOwn = arguments[2];
+  /**
+   * Выполняет функцию для всех атрибутов объекта
+   * @param {Object} obj  Итерируемый объект.
+   * @param {Function} fn  Выполняемая функция. Если из нее возвратить false, то итерация прекращется.
+   * @param {Boolean} [onlyOwn=false]  Опционально. Выполнять функцию только для "личных" атрибутов объекта.
+   */
+  function each(obj, fn, onlyOwn) {
     if (Object.isIteratable(obj)) {
-      obj = Array.from(obj);
       for (var i = 0, len = obj.length; i < len; i++) {
         if (fn.call(obj, obj[i], i, obj) === false) {
           break;
@@ -435,8 +453,10 @@
   var Events = new Class({
 
     Name: 'Events',
-    init: function(/*events=null*/) {
-      var events = arguments[0] || null;
+   /**
+    * @param {Object} [events=null]  Объект с событиями, которые будут добавлены при создании Events-объекта
+    */
+    init: function(events) {
       this.$events = this.$events || {};
       if (events) {
         this.addEvents(events);
@@ -668,6 +688,47 @@
       return this.$status === REJECTED;
     }
   });
+
+  /*----------   Реализация deferred-а DOMReady (аналог $(document).ready) ----------*/
+  var DOMReady = new Deferred(),
+      resolve = DOMReady.resolve.bind(DOMReady);
+
+  if (document.readyState === 'complete') {
+    resolve();
+  } else if (document.addEventListener) {
+    DOMReady.done(function() {
+      document.removeEventListener('DOMContentLoaded', resolve);
+      window.removeEventListener('load', resolve);
+    });
+    document.addEventListener('DOMContentLoaded', resolve, false);
+    window.addEventListener('load', resolve, false);
+  } else if (document.attachEvent) {
+    var loaded = function() {
+      if (document.readyState === 'complete') {
+        document.detachEvent('onreadystatechange', loaded);
+        window.detachEvent('onload', loaded);
+        resolve();
+      }
+    };
+    document.attachEvent('onreadystatechange', loaded);
+    document.attachEvent('onload', loaded);
+    // Хак для мониторинга загрузки DOM в IE
+    try {
+      var toplevel = (window.frameElement == null);
+    } catch(e) {}
+
+    if (toplevel && document.documentElement.doScroll) {
+      (function() {
+        try {
+          document.documentElement.doScroll('left');
+        } catch(e) {
+          setTimeout(arguments.callee, 10);
+          return;
+        }
+        loaded();
+      })();
+    }
+  }
 
 
   /*   *** Загрузчик ресурсов ***
@@ -978,7 +1039,7 @@
       var flags = this.flags,
           _super = Deferred.fn._callDeferredCallbacks.bind(this, callbacks);
       flags && flags.ready ?
-        window.$(function() {
+        DOMReady.done(function() {
           _super();
         }) : _super();
     },
@@ -1032,15 +1093,9 @@
         module.deferLoad();
         callbacks.push( module.resolve.bind(module) );
       }
-      exports = this._parseExports(exports);
-      if (exports && exports.flags.ready) {
-        // Принудительно добавляем к загружаемым скриптам jQuery
-        // TODO: как-то избавиться от этого говна (написать свой ready?)
-        query = 'jQuery;' + query;
-      }
       var urls = this._parseQuery(query),
           handlers = urls.map(function(part) {
-            var _exports = ( part === this.last() ) ? exports : null;
+            var _exports = ( part === this.last() ) ? self._parseExports(exports) : null;
             return self._getLoadHandler(part, _exports);
           }, urls);
       handlers.forEach(function(handler, i) {
@@ -1173,6 +1228,7 @@
     pass: pass,
     when: Deferred.when,
     signals: signals,
+    ready: DOMReady.done.bind(DOMReady),
     // Загрузчик
     Loader: Loader,
     loader: loader,
