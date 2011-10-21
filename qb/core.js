@@ -60,7 +60,7 @@
     return to;
   }
 
-  function fromProtoToStatic(constructor, methods) {
+  function makeStatic(constructor, methods) {
     var proto = constructor.prototype;
     methods.forEach(function(method) {
       if (!constructor.hasOwnProperty(method)) {
@@ -141,15 +141,22 @@
       return obj && obj.length != null && typeof obj !== 'string' && !Function.is(obj);
     },
     keys: function(obj) {
-      if (Object.is(obj)) {
-        var keys = [];
-        for (var key in obj) {
-          if (obj.hasOwnProperty(key)) {
-            keys.push(key);
-          }
+      var keys = [];
+      for (var key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          keys.push(key);
         }
       }
-      return keys || [];
+      return keys;
+    },
+    values: function(obj) {
+      var values = [];
+      for (var key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          values.push(obj[key]);
+        }
+      }
+      return values;
     }
   }, false, true);
   Object.is = Object.isObject;
@@ -279,19 +286,20 @@
       });
     },
     append: function(array) {
+      var shift = this.length;
       for (var i = 0, len = array.length; i < len; i++) {
-        this.push(array[i]);
+        this[shift + i] = array[i];
       }
     },
     forEachCall: function(methodName/*, arg1...argN*/) {
       var args = Array.slice(arguments, 1);
-      this.forEach(function(callable) {
+      return this.forEach(function(callable) {
         callable[methodName].apply(callable, args);
       });
     }
   }, false, true);
 
-  fromProtoToStatic(Array, ['slice', 'splice']);
+  makeStatic(Array, ['slice', 'splice']);
 
   /*----------   Расширение String   ----------*/
   var reFormatReplace = /\{(\w*)\}/g,
@@ -356,6 +364,27 @@
     }
   }, false, true),
   Date.is = Date.isDate;
+
+  /*----------   Расширение Number   ----------*/
+  var Math = window.Math;
+  merge(Number, {
+    random: function(min, max) {
+      return min + Math.random() * (max - min);
+    }
+  }, false, true);
+
+  merge(Number.prototype, {
+    limit: function(min, max) {
+      return Math.min( max, Math.max(min, this) );
+    }
+  }, false, true);
+
+  ['abs', 'ceil', 'floor', 'round'].forEach(function(method) {
+    var fn = Math[method];
+    this[method] = function() {
+      return fn.call(Math, this);
+    }
+  }, Number.prototype);
 
   /*----------   Дополнительные утилиты   ----------*/
   /**
@@ -698,20 +727,16 @@
   } else if (document.addEventListener) {
     DOMReady.done(function() {
       document.removeEventListener('DOMContentLoaded', resolve);
-      window.removeEventListener('load', resolve);
     });
     document.addEventListener('DOMContentLoaded', resolve, false);
-    window.addEventListener('load', resolve, false);
   } else if (document.attachEvent) {
     var loaded = function() {
       if (document.readyState === 'complete') {
         document.detachEvent('onreadystatechange', loaded);
-        window.detachEvent('onload', loaded);
         resolve();
       }
     };
     document.attachEvent('onreadystatechange', loaded);
-    document.attachEvent('onload', loaded);
     // Хак для мониторинга загрузки DOM в IE
     try {
       var toplevel = (window.frameElement == null);
@@ -729,7 +754,6 @@
       })();
     }
   }
-
 
   /*   *** Загрузчик ресурсов ***
    *
