@@ -92,8 +92,8 @@
       var fn = this,
           prependedArgs = arguments.length > 1 ? Array.slice(arguments, 1) : null;
       return function() {
-        var args = Array.slice(arguments);
-        return fn.apply(thisObj, prependedArgs ? prependedArgs.concat(args) : args);
+        var args = prependedArgs ? prependedArgs.concat( Array.slice(arguments) ) : arguments;
+        return fn.apply(thisObj, args);
       }
     },
     /**
