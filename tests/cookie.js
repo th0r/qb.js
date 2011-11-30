@@ -69,4 +69,22 @@ qb.require('qb/cookie', 'qb.cookie', function(cookie) {
 
   });
 
+  test('has', function() {
+
+    var key = 'empty-key',
+        val = '';
+    document.cookie = key + '=' + val;
+    ok( cookie.has(key), 'Пустой ключ "{}" найден'.format(key) );
+
+    key = 'filled-key';
+    val = 'value-suka';
+    document.cookie = key + '=' + val;
+    ok( cookie.has(key), 'Непустой ключ "{}" найден'.format(key) );
+
+    ok( !cookie.has('unset-key'), 'Несуществующий ключ не найден' );
+
+  });
+
+  cookie.clear();
+
 });
