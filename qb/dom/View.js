@@ -1,4 +1,4 @@
-qb.require('jQuery', 'qb: each, Class; qb; jQuery; document', function(each, Class, qb, $, document, undefined) {
+qb.require('jquery', 'qb: each, Class; qb; jQuery; document', function(each, Class, qb, $, document, undefined) {
 
   /*
    * Usage:

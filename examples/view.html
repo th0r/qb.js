@@ -4,10 +4,7 @@
 <head>
 	<title>View Test</title>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<script type="text/javascript" src="../qb/jQuery/1.5.1.dev.js"></script>
 	<script type="text/javascript" src="../qb/core.js"></script>
-	<script type="text/javascript" src="../qb/class.js"></script>
-	<script type="text/javascript" src="../qb/dom/view.js"></script>
 </head>
 <body>
 	<ul id="items">
@@ -18,41 +15,48 @@
 	</ul>
 
 	<script type="text/javascript">
-		var view = new qb.dom.View({
-			items: {
-				holder: '#items',
-				itemTmpl: {
-					holder: '#item',
-					label: '.label',
-					descr: '.description'
-				}
-			}
-															 });
-		var itemTmpl = view.$items.$itemTmpl.useAsTemplate('hidden');
 
-		var n = 1000,
-				holder = view.$items.$holder;
+        qb.loader.queryShortcuts.add({'jquery': 'libs/jquery'});
+        qb.require('qb/dom/View', 'qb.View | {ready}', function(View) {
 
-		var method = 'find';
-		var startTime = new Date();
-		for( var i = 0; i < n; i++ ) {
-			var $item = itemTmpl.$holder.clone(false);
-			var $label = $item[method]('.label');
-			var $descr = $item[method]('.description');
-			holder.append($item);
-		}
-		var endTime = new Date();
-		alert( 'raw: ' + (endTime - startTime) );
+            var view = new View({
+                items: {
+                    holder: '#items',
+                    itemTmpl: {
+                        holder: '#item',
+                        label: '.label',
+                        descr: '.description'
+                    }
+                }
+            });
+            var itemTmpl = view.$items.$itemTmpl.useAsTemplate('hidden');
 
-		holder.empty();
-		
-		var startTime = new Date();
-		for( var i = 0; i < n; i++ ) {
-			var item = itemTmpl.cloneView();
-			holder.append(item.$holder);
-		}
-		var endTime = new Date();
-		alert( 'view: ' + (endTime - startTime) );
+            var n = 1000,
+                holder = view.$items.$holder;
+
+            var method = 'find';
+            var startTime = new Date();
+            for (var i = 0; i < n; i++) {
+                var $item = itemTmpl.$holder.clone(false);
+                var $label = $item[method]('.label');
+                var $descr = $item[method]('.description');
+                holder.append($item);
+            }
+            var endTime = new Date();
+            alert( 'raw: ' + (endTime - startTime) );
+
+            holder.empty();
+
+            startTime = new Date();
+            for(i = 0; i < n; i++) {
+                var item = itemTmpl.cloneView();
+                holder.append(item.$holder);
+            }
+            endTime = new Date();
+            alert( 'view: ' + (endTime - startTime) );
+
+        });
+
 	</script>
 </body>
 </html>
