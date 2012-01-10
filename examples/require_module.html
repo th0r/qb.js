@@ -21,7 +21,8 @@
 	</div>
 
 	<script type="text/javascript">
-		qb.require('dom.View', function(View) {
+        qb.loader.queryShortcuts.add({jquery: 'libs/jquery'});
+		qb.require('qb/dom/View', 'qb.View', function(View) {
 			var $item = new View({
 				holder: '{*} #itemTmpl',
 				icon: '{iconWrap} > img',

@@ -96,7 +96,7 @@ qb.require('jquery', 'qb: each, Class; qb; jQuery; document', function(each, Cla
       self.map = map;
 
       // Ищем holder
-      if (map.hasOwnProperty(hp)) {
+      if (hp in map) {
         var _holder = map[hp];
         if (_holder instanceof $) {
           // Поддержка self.cloneView()
@@ -284,6 +284,6 @@ qb.require('jquery', 'qb: each, Class; qb; jQuery; document', function(each, Cla
     }
   });
 
-  qb.View = View;
+  qb.ns('dom.View', qb, View);
 
 }, 'qb/dom/View');

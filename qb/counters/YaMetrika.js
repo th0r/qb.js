@@ -1,4 +1,4 @@
-qb.require('//mc.yandex.ru/metrika/watch.js', 'Ya.Metrika; qb: Class, ns; def', function(Metrika, Class, ns, qb, document, window) {
+qb.require('//mc.yandex.ru/metrika/watch.js', 'Ya.Metrika; qb.Class; def', function(Metrika, Class, qb, document, window) {
 
   var YaMetrika = new Class({
     Name: 'YaMetrika',
@@ -12,6 +12,6 @@ qb.require('//mc.yandex.ru/metrika/watch.js', 'Ya.Metrika; qb: Class, ns; def', 
     }
   });
 
-  ns('counters.YaMetrika', qb, YaMetrika);
+  qb.ns('counters.YaMetrika', qb, YaMetrika);
 
 }, 'qb/counters/YaMetrika');
