@@ -1,56 +1,56 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-		"http://www.w3.org/TR/html4/loose.dtd">
+    "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
-	<title>View Test</title>
-	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<script type="text/javascript" src="http://code.jquery.com/jquery-1.5.js"></script>
-	<script type="text/javascript" src="class.js"></script>
-	<script type="text/javascript" src="../events.js"></script>
+    <title>View Test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="text/javascript" src="http://code.jquery.com/jquery-1.5.js"></script>
+    <script type="text/javascript" src="class.js"></script>
+    <script type="text/javascript" src="../events.js"></script>
 </head>
 <body>
-	<script type="text/javascript">
-		var Options = new Class({
-			setOptions: function(opts) {
-				var self = this;
-				var o = self.options = $.extend(true, {}, self.options, opts);
-				if( self.addEvent ) {
-					$.each(o, function(name, val) {
-						var event = name.match(/^on([A-Z]\w*)/);
-						if( event ) {
-							self.addEvent(event[1].toLowerCase(), val);
-							delete o[name];
-						}
-					});
-				}
-			}
-														});
+    <script type="text/javascript">
+        var Options = new Class({
+            setOptions: function(opts) {
+                var self = this;
+                var o = self.options = $.extend(true, {}, self.options, opts);
+                if (self.addEvent) {
+                    $.each(o, function(name, val) {
+                        var event = name.match(/^on([A-Z]\w*)/);
+                        if (event) {
+                            self.addEvent(event[1].toLowerCase(), val);
+                            delete o[name];
+                        }
+                    });
+                }
+            }
+        });
 
-		var Thumb = new Class({
-			Implements: [Events, Options],
-			options: {
-				prop2: 2,
-				someObj: {
-					a: 1
-				}
-			},
-			init: function(opts) {
-				this.setOptions(opts);
-			}
-													});
+        var Thumb = new Class({
+            Implements: [Events, Options],
+            options: {
+                prop2: 2,
+                someObj: {
+                    a: 1
+                }
+            },
+            init: function(opts) {
+                this.setOptions(opts);
+            }
+        });
 
-		var t = new Thumb({
-			someObj: {
-				b: 2,
-				c: 3
-			},
-			prop1: 1,
-			prop3: 3,
-			onClick: function() {},
-			onBeforeShow: function() {}
-											});
+        var t = new Thumb({
+            someObj: {
+                b: 2,
+                c: 3
+            },
+            prop1: 1,
+            prop3: 3,
+            onClick: function() {},
+            onBeforeShow: function() {}
+        });
 
-		console.debug(t);
-	</script>
+        console.debug(t);
+    </script>
 </body>
 </html>

@@ -1,23 +1,23 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-		"http://www.w3.org/TR/html4/loose.dtd">
+    "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
-	<title>View Test</title>
-	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<script type="text/javascript" src="../qb/core.js"></script>
+    <title>View Test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="text/javascript" src="../qb/core.js"></script>
 </head>
 <body>
-  <script type="text/javascript">
-    qb.require('classes.Lazy.jQuerySelector; $', function(l$, $) {
-      var lazySelector = new l$('script');
-      console.debug('Before invoke: ', lazySelector.result);
-      console.debug('Invoking "get": ', lazySelector.get());
-      console.debug('Result in obj: ', lazySelector.result);
-      lazySelector.changeValue('title');
-      console.debug('Changed value to "title"');
-      console.debug('Result is: ', lazySelector.result);
-      console.debug('Invoking "get". Getting text(): ', lazySelector.get().text());
-    });
-	</script>
+    <script type="text/javascript">
+        qb.require('classes.Lazy.jQuerySelector; $', function(l$, $) {
+            var lazySelector = new l$('script');
+            console.debug('Before invoke: ', lazySelector.result);
+            console.debug('Invoking "get": ', lazySelector.get());
+            console.debug('Result in obj: ', lazySelector.result);
+            lazySelector.changeValue('title');
+            console.debug('Changed value to "title"');
+            console.debug('Result is: ', lazySelector.result);
+            console.debug('Invoking "get". Getting text(): ', lazySelector.get().text());
+        });
+    </script>
 </body>
 </html>

@@ -1,38 +1,38 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-		"http://www.w3.org/TR/html4/loose.dtd">
+    "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
-	<title>View Test</title>
-	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<script type="text/javascript" src="../qb/core.js"></script>
+    <title>View Test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="text/javascript" src="../qb/core.js"></script>
 </head>
 <body>
-	<script type="text/javascript">
-		qb.require('Class; classes: Collection, Events', function(Class, Collection, Events) {
-			var CollectionEx = new Class({
-				Name: 'CollectionEx',
-				Implements: Events,
-				Extends: Collection,
-				multiple: function(k) {
-					this.forEach( function( item, i, items ) {
-						items[i] = item * k;
-					} )
-				}
-			});
+    <script type="text/javascript">
+        qb.require('Class; classes: Collection, Events', function(Class, Collection, Events) {
+            var CollectionEx = new Class({
+                Name: 'CollectionEx',
+                Implements: Events,
+                Extends: Collection,
+                multiple: function(k) {
+                    this.forEach(function(item, i, items) {
+                        items[i] = item * k;
+                    })
+                }
+            });
 
-			var c = new CollectionEx([1, 2, 3]);
-			c.multiple(10);
-			c.splice(0, 1, 'newItem', 'anotherItem');
-			var obj = {
-				collection: c,
-				isArray: c instanceof Array
-			};
-			c.forEach(function(val) {
-				console.log(val);
-			});
-			console.log( obj );
-			console.log( qb.modulesRoot );
-		});
-	</script>
+            var c = new CollectionEx([1, 2, 3]);
+            c.multiple(10);
+            c.splice(0, 1, 'newItem', 'anotherItem');
+            var obj = {
+                collection: c,
+                isArray: c instanceof Array
+            };
+            c.forEach(function(val) {
+                console.log(val);
+            });
+            console.log(obj);
+            console.log(qb.modulesRoot);
+        });
+    </script>
 </body>
 </html>

@@ -1,29 +1,29 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-		"http://www.w3.org/TR/html4/loose.dtd">
+    "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
-	<title>Sync Test</title>
-	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<script type="text/javascript" src="../qb/core.js"></script>
-	<script type="text/javascript" src="../qb/class.js"></script>
-	<script type="text/javascript" src="../qb/classes/events.js"></script>
-	<script type="text/javascript" src="../qb/sync.js"></script>
+    <title>Sync Test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="text/javascript" src="../qb/core.js"></script>
+    <script type="text/javascript" src="../qb/class.js"></script>
+    <script type="text/javascript" src="../qb/classes/events.js"></script>
+    <script type="text/javascript" src="../qb/sync.js"></script>
 </head>
 <body>
-	<script type="text/javascript">
-		var sync = new qb.Sync({
-			onSuccess: function() {
-				console.debug('finish');
-			}
-													 });
-		setTimeout( sync.wrap(function() {
-			console.debug('first');
-		}), 1000 );
+    <script type="text/javascript">
+        var sync = new qb.Sync({
+            onSuccess: function() {
+                console.debug('finish');
+            }
+        });
+        setTimeout(sync.wrap(function() {
+            console.debug('first');
+        }), 1000);
 
-		setTimeout( sync.wrap(function() {
-			console.debug('second');
-		}), 2000 );
+        setTimeout(sync.wrap(function() {
+            console.debug('second');
+        }), 2000);
 
-	</script>
+    </script>
 </body>
 </html>

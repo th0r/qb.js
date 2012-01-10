@@ -1,20 +1,20 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-		"http://www.w3.org/TR/html4/loose.dtd">
+    "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
-	<title>View Test</title>
-	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<script type="text/javascript" src="../qb/core.js"></script>
+    <title>View Test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="text/javascript" src="../qb/core.js"></script>
 </head>
 <body>
-	<ul id="items">
-		<li id="item" class="hidden">
-			<span class="label">Заголовок</span>
-			<span class="description">Описание</span>
-		</li>
-	</ul>
+    <ul id="items">
+        <li id="item" class="hidden">
+            <span class="label">Заголовок</span>
+            <span class="description">Описание</span>
+        </li>
+    </ul>
 
-	<script type="text/javascript">
+    <script type="text/javascript">
 
         qb.loader.queryShortcuts.add({'jquery': 'libs/jquery'});
         qb.require('qb/dom/View', 'qb.View | {ready}', function(View) {
@@ -43,20 +43,20 @@
                 holder.append($item);
             }
             var endTime = new Date();
-            alert( 'raw: ' + (endTime - startTime) );
+            alert('raw: ' + (endTime - startTime));
 
             holder.empty();
 
             startTime = new Date();
-            for(i = 0; i < n; i++) {
+            for (i = 0; i < n; i++) {
                 var item = itemTmpl.cloneView();
                 holder.append(item.$holder);
             }
             endTime = new Date();
-            alert( 'view: ' + (endTime - startTime) );
+            alert('view: ' + (endTime - startTime));
 
         });
 
-	</script>
+    </script>
 </body>
 </html>
