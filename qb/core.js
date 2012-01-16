@@ -160,6 +160,29 @@
                 }
             }
             return values;
+        },
+        /**
+         * Делает новый объект на основе указанного.
+         * @param {Object|Array} obj  Итерируемый объект, из которого нужно создать новый объект.
+         * @param {Function} fn  Обработчик объекта. Вызывается для каждого ключа исходного объекта.
+         *                       Контекст - создаваемый объект. Параметры - ключ исходного объекта, значение ключа, исходный объект.
+         *                       Если из функции возвращается стока (str), то в новый объект записывается ключ str со значением из
+         *                       исходного объекта.
+         *                       Если возвращаемое значение не строка и интерпретируется как true, то в новый объект записывается
+         *                       исходный ключ с исходным значением.
+         *                       Если возвращаемое значение не строка и интерпретируется как false, ключ в новый объект не попадает.
+         */
+        makeFrom: function(obj, fn) {
+            var newObj = {};
+            each(obj, function(val, key) {
+                var res = fn.call(newObj, key, val, this);
+                if (typeof res === 'string') {
+                    newObj[res] = val;
+                } else if (res) {
+                    newObj[key] = val;
+                }
+            }, true);
+            return newObj;
         }
     }, false, true);
     Object.is = Object.isObject;
@@ -299,6 +322,17 @@
             return this.forEach(function(callable) {
                 callable[methodName].apply(callable, args);
             });
+        },
+        /**
+         * Преобразует массив ключей в объект (['a', 'b'] => {a: true, b: true})
+         * @param [value=true]  Опционально. Значение, которое будет записано в объект для каждого ключа.
+         * @returns {Object}
+         */
+        toObject: function(value) {
+            value = arguments.length ? value : true;
+            return Object.makeFrom(this, function(i, key) {
+                this[key] = value;
+            });
         }
     }, false, true);
 
@@ -314,6 +348,9 @@
         };
 
     merge(String.prototype, {
+        trim: function() {
+            return this.replace(/^\s+/, '').replace(/\s+$/, '');
+        },
         contains: Array.prototype.contains,
         format: function(replaceObj) {
             return this.replace(reFormatReplace, function(fullExpr, expr) {
@@ -340,17 +377,19 @@
         /**
          * Преобразует строку в примитивы
          * ('null' -> null; 'true' -> true и т.д.)
+         * Строка 'undefined' остается нетронутой.
          */
         parse: function() {
-            var str = '' + this;
-            if (str === 'undefined') {
-                return undefined;
-            }
-            var result = parseObj[this];
-            if (result === undefined) {
-                result = +this;
-                if (isNaN(result)) {
-                    result = str;
+            var str = '' + this,
+                result = parseObj[str];
+            // Проверка на примитивы. hasOwnProperty исключает атрибуты прототипа объекта (toString и т.д.)
+            if (result === undefined || !parseObj.hasOwnProperty(str)) {
+                // Пробуем преобразовать в число
+                result = +str;
+                // Проверяем вариант пустой строки, т.к. (+' ' === 0)
+                if (isNaN(result) || (result === 0 && !str.trim().length)) {
+                    // Преобразовать не получилось - возвращаем строку
+                    return str;
                 }
             }
             return result;
@@ -918,8 +957,14 @@
                 this._createElem();
             }
         },
+        destroy: function() {
+            this._removeElem();
+        },
         _createElem: function() {
             throw 'Перегрузите этот метод. Здесь должен создаваться DOM-элемент';
+        },
+        _removeElem: function() {
+            throw 'Перегрузите этот метод. Здесь должен удаляться DOM-элемент';
         },
         resolve: function() {
             this.status = STATUS.LOADED;
@@ -982,6 +1027,9 @@
             this._bindLoadHandler();
             script.src = this.url;
             HEAD_ELEM.appendChild(script);
+        },
+        _removeElem: function() {
+            HEAD_ELEM.removeChild(this.elem);
         },
         resolve: function() {
             var elem = this.elem;
@@ -1137,8 +1185,15 @@
         },
         _getLoadHandler: function(urls, exports) {
             var resources = this.resources,
+                isReload = exports ? exports.flags.reload : false,
                 required = urls.map(function(url) {
-                    return ( resources[url] = resources[url] || new (this._isStylesheet(url) ? Stylesheet : Script)(url) );
+                    var resource = resources[url],
+                        isCSS = this._isStylesheet(url);
+                    if (isReload && !isCSS && resource && resource.status === STATUS.LOADED) {
+                        resource.destroy();
+                        delete resources[url];
+                    }
+                    return ( resources[url] = resources[url] || new (isCSS ? Stylesheet : Script)(url) );
                 }, this);
             return new Handler(this, required, exports);
         },
@@ -1184,7 +1239,7 @@
         },
         _parseExports: function(exports) {
             if (exports) {
-                var flags = [],
+                var flags = {},
                     args = normalizeQuery(exports).replace(EXPORTS_FLAGS, function(_, _flags) {
                         _flags.split(',').forEach(function(flag) {
                             this[flag] = true;
@@ -1267,7 +1322,9 @@
         Class: Class,
         Events: Events,
         Deferred: Deferred,
-        Script: Script
+        Script: Script,
+        // Объект Debug-параметров
+        debug: {}
     });
 
     window.qb = qb;
