@@ -44,6 +44,40 @@ test('Function.prototype.thisToArg', 2, function() {
 
 });
 
+test('"".parse', function() {
+
+    var canBeParsed = {
+        '1': 1,
+        '.5': 0.5,
+        '-.5': -0.5,
+        '-1': -1,
+        '   10': 10,
+        '   10e2': 1000,
+        '   10E-2': 0.1,
+        '  0xFF ': 0xFF,
+        // Это НЕ 8-ричная система, а 10-ричная
+        '  088 ': 88,
+        'null': null,
+        'NaN': function(result) {
+            return isNaN(result);
+        },
+        'false': false,
+        'true': true
+    };
+
+    for (var str in canBeParsed) {
+        var val = canBeParsed[str],
+            res = str.parse(),
+            msg = '"{}" пробразовано успешно'.format(str);
+        Function.is(val) ? ok(val(res), msg) : strictEqual(res, val, msg);
+    }
+
+    var cantBeParsed = ['1a', 'a1', '-', 'FF', 'undefined', 'toString', 'hasOwnProperty', ' null', 'Null', '   ', ''];
+    cantBeParsed.forEach(function(str) {
+        strictEqual(str.parse(), str, '"{}" не преобразовано'.format(str))
+    });
+});
+
 asyncTest('qb.require', 1, function() {
 
     var root = 'tests/data/scripts';
