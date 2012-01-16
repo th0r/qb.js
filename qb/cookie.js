@@ -15,7 +15,9 @@
             var ind = part.indexOf('='),
                 key = (ind > -1) ? decode(part.substr(0, ind)) : part,
                 value = (ind > -1) ? decode(part.substr(ind + 1)) : '';
-            cookies[key] = parse ? value.parse() : value;
+            if (key) {
+                cookies[key] = parse ? value.parse() : value;
+            }
         });
         return cookies;
     }
@@ -40,9 +42,10 @@
      * Устанавливает куку.
      * @param {String} key  Ключ куки. Он будет преобразован в строку методом encode.
      * @param [value='']  Опционально. Значение куки. Оно будет преобразовано в строку методом encode.
-     * @param {Number|Date} [till]  Опционально. Если указано число, то это время жизни куки в секундах.
-     *                              Если указан объект Date, то кука будет жить до этой даты.
-     *                              Если не указан, то кука будет жить до конца текущей сессии.
+     * @param {Number|Date|Boolean} [till]  Опционально. Если указано число, то это время жизни куки в секундах.
+     *                                      Если указан объект Date, то кука будет жить до этой даты.
+     *                                      Если указано true, то кука будет "вечной" (около 10 лет)
+     *                                      Если не указан, то кука будет жить до конца текущей сессии.
      * @param {String} [domain]  Опционально. Домен, для которого активна данная кука.
      * @param {Boolean} [secure]  Опционально. Будет ли кука доступна только по защищенному соединению.
      * @returns {String}  Сформированная строка, которая присвоилась document.cookie для установки этой куки.
@@ -51,17 +54,23 @@
         if (value === undefined) {
             value = '';
         }
-        if (till != null) {
+        var expires = till;
+        if (!Date.is(expires)) {
+            expires = null;
+            if (till === true) {
+                // "Вечная" кука (около 10 лет)
+                till = 3E8;
+            }
             if (typeof till === 'number') {
-                till = '; max-age=' + till;
-            } else if (Date.is(till)) {
-                till = '; expires=' + till.toUTCString();
-            } else {
-                till = null;
+                expires = new Date();
+                expires.setSeconds(expires.getSeconds() + till);
             }
         }
-        return (document.cookie = encode(key) + '=' + encode(value) + (till || '') +
-                                  (domain ? '; domain=' + domain : '') + (secure ? '; secure' : '') );
+        // Используется только expires, так как max-age не поддерживает IE6-8
+        return (document.cookie = [encode(key), '=', encode(value),
+                                   (expires ? '; expires=' + expires.toUTCString() : ''),
+                                   (domain ? '; domain=' + domain : ''),
+                                   (secure ? '; secure' : '')].join(''));
     }
 
     /**

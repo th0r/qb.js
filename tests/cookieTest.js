@@ -1,4 +1,4 @@
-qb.require('qb/cookie', 'qb.cookie', function(cookie) {
+qb.require('qb/cookie', 'qb.cookie', function(cookie, undefined) {
 
     module('cookie');
 
@@ -30,8 +30,7 @@ qb.require('qb/cookie', 'qb.cookie', function(cookie) {
         cookie.set(key, val);
         strictEqual(cookie.get(key), val, 'Экранирование ключей и значений');
 
-        key = 'temporary';
-        val = 'max-age';
+        key = 'max-age';
         cookie.set(key, val, 1);
         strictEqual(cookie.get(key), val, 'Кука с max-age установлена');
         stop();
@@ -40,13 +39,12 @@ qb.require('qb/cookie', 'qb.cookie', function(cookie) {
             start();
         }, 2000);
 
-        var after_2_secs = new Date(Date.now() + 1000);
-        val = 'expires';
-        cookie.set(key, val, after_2_secs);
-        strictEqual(cookie.get(key), val, 'Кука с expires установлена');
+        var key2 = 'expires';
+        cookie.set(key2, val, new Date(Date.now() + 1000));
+        strictEqual(cookie.get(key2), val, 'Кука с expires установлена');
         stop();
         setTimeout(function() {
-            strictEqual(cookie.get(key), undefined, 'Кука с expires успешно протухла');
+            strictEqual(cookie.get(key2), undefined, 'Кука с expires успешно протухла');
             start();
         }, 2000);
 
