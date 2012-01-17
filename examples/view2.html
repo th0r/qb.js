@@ -2,7 +2,7 @@
     "http://www.w3.org/TR/html4/loose.dtd">
 <html>
 <head>
-    <title>Require Test</title>
+    <title>View Test</title>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <script type="text/javascript" src="../qb/core.js"></script>
 </head>
@@ -22,7 +22,7 @@
 
     <script type="text/javascript">
         qb.loader.queryShortcuts.add({jquery: 'libs/jquery'});
-        qb.require('qb/dom/View', 'qb.View', function(View) {
+        qb.require('qb/dom/View', 'qb.dom.View', function(View) {
             var $item = new View({
                 holder: '{*} #itemTmpl',
                 icon: '{iconWrap} > img',

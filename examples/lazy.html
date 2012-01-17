@@ -8,12 +8,13 @@
 </head>
 <body>
     <script type="text/javascript">
-        qb.require('classes.Lazy.jQuerySelector; $', function(l$, $) {
-            var lazySelector = new l$('script');
+        qb.loader.queryShortcuts.add({'jquery': 'libs/jquery'});
+        qb.require('qb/classes/LazyjQuerySelector', function() {
+            var lazySelector = $$('script');
             console.debug('Before invoke: ', lazySelector.result);
             console.debug('Invoking "get": ', lazySelector.get());
             console.debug('Result in obj: ', lazySelector.result);
-            lazySelector.changeValue('title');
+            lazySelector.change('title');
             console.debug('Changed value to "title"');
             console.debug('Result is: ', lazySelector.result);
             console.debug('Invoking "get". Getting text(): ', lazySelector.get().text());
