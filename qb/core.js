@@ -897,7 +897,8 @@
      *      '{ready}'
      */
 
-    var HEAD_ELEM = document.getElementsByTagName('head')[0];
+    var HEAD_ELEM = document.getElementsByTagName('head')[0],
+        DOC_ELEM = document.documentElement;
 
     var Shortcuts = new Class({
         Name: 'Shortcuts',
@@ -935,14 +936,15 @@
     });
 
     var STATUS = {
-        UNLOADED: 0,
-        LOADING: 1,
-        LOADED: 2,
-        LOAD_ERROR: 3
-    };
+            UNLOADED: 0,
+            PREFETCHED: 1,
+            LOADING: 2,
+            LOADED: 3,
+            LOAD_ERROR: 4
+        };
 
     var LoadingElement = new Class({
-        Name: 'Element',
+        Name: 'LoadingElement',
         Extends: Deferred,
 
         init: function(url) {
@@ -950,11 +952,36 @@
             this.url = url;
             this.elem = null;
             this.status = STATUS.UNLOADED;
+            var cache = this.cache = new Deferred();
+        },
+        prefetch: function() {
+            if (this.status === STATUS.UNLOADED) {
+                this.status = STATUS.PREFETCHED;
+                var self = this,
+                    // TODO: Сhrome дико тормозит при использовании object. В yepnope, например, для него использутся img.
+                    elem = document.createElement('object');
+                elem.data = this.url;
+                elem.width = elem.height = 0;
+                elem.onload = function() {
+                    console.timeEnd(self.url);
+                    console.timeStamp(self.url + 'prefetched');
+                    console.debug(self.url + ' prefetched');
+                    // BUGFIX: Без таймаута Firefox берет данные не из кэша, а посылает второй запрос.
+                    setTimeout(function() {
+                        self.cache.resolve();
+                        DOC_ELEM.removeChild(elem);
+                    }, 0);
+                };
+                console.debug('Prefetching resource "{}"...'.format(self.url));
+                console.time(self.url);
+                DOC_ELEM.appendChild(elem);
+            }
         },
         load: function() {
-            if (this.status === STATUS.UNLOADED) {
+            var prefetched = (this.status === STATUS.PREFETCHED);
+            if (this.status === STATUS.UNLOADED || prefetched) {
                 this.status = STATUS.LOADING;
-                this._createElem();
+                prefetched ? this.cache.done(this._createElem.bind(this)) : this._createElem();
             }
         },
         destroy: function() {
@@ -1023,6 +1050,7 @@
             LoadingElement.call(this, url);
         },
         _createElem: function() {
+            console.debug('Script element created for "{}"...'.format(this.url));
             var script = this.elem = document.createElement('script');
             this._bindLoadHandler();
             script.src = this.url;
@@ -1032,6 +1060,7 @@
             HEAD_ELEM.removeChild(this.elem);
         },
         resolve: function() {
+            console.debug('Module "{}" loaded.'.format(this.url));
             var elem = this.elem;
             elem.onreadystatechange = elem.onload = elem.onerror = null;
             LoadingElement.fn.resolve.call(this);
@@ -1097,10 +1126,13 @@
         Name: 'Handler',
         Extends: Deferred,
 
-        init: function(loader, resources, exports) {
+        init: function(loader, resources, exports, prefetch) {
             Deferred.call(this);
 
             this.resources = resources;
+            if (prefetch) {
+                resources.forEachCall('prefetch');
+            }
             this.loader = loader;
             this.args = exports ? exports.args : null;
             this.flags = exports ? exports.flags : null;
@@ -1147,18 +1179,18 @@
     var Loader = new Class({
         Name: 'Loader',
         Static: {
-            FULL_URL: /^(\/|https?:\/\/)/i
+            FULL_URL: /^(\/|https?:\/\/)/i,
+            resources: {}
         },
 
         init: function(rootUrl) {
             this.rootUrl = rootUrl.toLowerCase();
             this.queryShortcuts = new Shortcuts(',.:;/!}');
             this.exportShortcuts = new Shortcuts(',.:;');
-            this.resources = {};
         },
         require: function(query/*, exports*/, callback/*, module*/) {
             var self = this,
-                resources = this.resources,
+                resources = Loader.resources,
                 module = arguments[arguments.length - 1];
             if (!Function.is(callback)) {
                 var exports = callback;
@@ -1172,9 +1204,10 @@
                 callbacks.push(module.resolve.bind(module));
             }
             var urls = this._parseQuery(query),
-                handlers = urls.map(function(part) {
-                    var _exports = ( part === this.last() ) ? self._parseExports(exports) : null;
-                    return self._getLoadHandler(part, _exports);
+                handlers = urls.map(function(part, i) {
+                    var prefetch = !qb.debug.noPrefetch && (i > 0),
+                        _exports = ( part === this.last() ) ? self._parseExports(exports) : null;
+                    return self._getLoadHandler(part, _exports, prefetch);
                 }, urls);
             handlers.forEach(function(handler, i) {
                 var next = this[i + 1];
@@ -1183,8 +1216,8 @@
             handlers[0].load();
             return handlers.last();
         },
-        _getLoadHandler: function(urls, exports) {
-            var resources = this.resources,
+        _getLoadHandler: function(urls, exports, prefetch) {
+            var resources = Loader.resources,
                 isReload = exports ? exports.flags.reload : false,
                 required = urls.map(function(url) {
                     var resource = resources[url],
@@ -1195,7 +1228,7 @@
                     }
                     return ( resources[url] = resources[url] || new (isCSS ? Stylesheet : Script)(url) );
                 }, this);
-            return new Handler(this, required, exports);
+            return new Handler(this, required, exports, prefetch);
         },
         _parseQuery: function(query) {
             var parts = (typeof query === 'string') ? splitQuery(normalizeQuery(query)) : query,
