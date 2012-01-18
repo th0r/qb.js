@@ -964,7 +964,7 @@
                 elem.width = elem.height = 0;
                 elem.onload = function() {
                     console.timeEnd(self.url);
-                    console.timeStamp(self.url + 'prefetched');
+                    console.timeStamp(self.url + ' prefetched');
                     console.debug(self.url + ' prefetched');
                     // BUGFIX: Без таймаута Firefox берет данные не из кэша, а посылает второй запрос.
                     setTimeout(function() {

@@ -1,0 +1,29 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+    "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+    <title>Prefetch Test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="text/javascript" src="../qb/core.js"></script>
+</head>
+<body>
+    <script type="text/javascript">
+        qb.debug.noPrefetch = false;
+        qb.loader.queryShortcuts.add({
+            'jquery': 'libs/jquery',
+            'jquery-ui': 'libs/jquery-ui/jquery-ui',
+            'jquery-ui-css': '/libs/jquery-ui/jquery-ui.css'
+        });
+        console.time('qb.require callback');
+        qb.require('qb: storage, cookie, dom/View; {1}jquery; {2}jquery-ui', 'qb: storage, cookie, dom.View; $; $.ui; def', function() {
+            console.timeEnd('qb.require callback');
+            console.log(arguments);
+//            var timing = window.performance.timing;
+//            setTimeout(function() {
+//                console.debug('Page loaded for {}'.format(timing.loadEventEnd - timing.requestStart));
+//            }, 1000);
+        });
+
+    </script>
+</body>
+</html>
