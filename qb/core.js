@@ -1,4 +1,7 @@
-(function(window, document, undefined) {
+(function(window, document, location, undefined) {
+
+    var HOST = location.protocol + '//' + location.host,
+        LINK = document.createElement('a');
 
     var qb = {};
 
@@ -373,6 +376,9 @@
         },
         escapeRegexp: function() {
             return this.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&');
+        },
+        escapeHTML: function() {
+            return this.replace('&', '$amp;').replace('<', '&lt;').replace('"', '&quote;').replace("'", '&apos;');
         },
         /**
          * Преобразует строку в примитивы
@@ -942,7 +948,7 @@
     };
 
     var LoadingElement = new Class({
-        Name: 'Element',
+        Name: 'LoadingElement',
         Extends: Deferred,
 
         init: function(url) {
@@ -1144,21 +1150,37 @@
     var PARTS_PRIORITY = /^!|^\{(\d+)}/i,
         EXPORTS_FLAGS = /(?:^|\|)\{(\w+)\}$/i;
 
+    // Проверка, работает ли преобразование урла в абсолютный через установку href у ссылки (не работает в IE<8)
+    LINK.href = 'a';
+    if (LINK.href === 'a') {
+        var DIV = document.createElement('div'),
+            toAbsoluteUrl = function(url) {
+                DIV.innerHTML = '<a href="' + url.escapeHTML() + '"></a>';
+                return DIV.firstChild.href;
+            };
+    } else {
+        toAbsoluteUrl = function(url) {
+            LINK.href = url;
+            return LINK.href;
+        }
+    }
+
     var Loader = new Class({
         Name: 'Loader',
         Static: {
-            FULL_URL: /^(\/|https?:\/\/)/i
+            FULL_URL: /^https?:\/\//i,
+            resources: {},
+            toAbsoluteUrl: toAbsoluteUrl
         },
 
         init: function(rootUrl) {
-            this.rootUrl = rootUrl.toLowerCase();
+            this.rootUrl = Loader.toAbsoluteUrl(rootUrl).toLowerCase();
             this.queryShortcuts = new Shortcuts(',.:;/!}');
             this.exportShortcuts = new Shortcuts(',.:;');
-            this.resources = {};
         },
         require: function(query/*, exports*/, callback/*, module*/) {
             var self = this,
-                resources = this.resources,
+                resources = Loader.resources,
                 module = arguments[arguments.length - 1];
             if (!Function.is(callback)) {
                 var exports = callback;
@@ -1184,7 +1206,7 @@
             return handlers.last();
         },
         _getLoadHandler: function(urls, exports) {
-            var resources = this.resources,
+            var resources = Loader.resources,
                 isReload = exports ? exports.flags.reload : false,
                 required = urls.map(function(url) {
                     var resource = resources[url],
@@ -1205,7 +1227,7 @@
                 if (part) {
                     var url = this._parsePriority(part),
                         _part = this._normalizePart(url.part);
-                    // Начинается с "/", "http://" или "https://"
+                    // Начинается с "http://" или "https://"
                     if (fullUrl.test(_part)) {
                         urls[_part] = url.priority;
                     } else {
@@ -1256,12 +1278,8 @@
         },
         _normalizePart: function(part) {
             part = part.toLowerCase();
-            if (part.startsWith('//')) {
-                part = window.location.protocol + part;
-            } else if (part.startsWith('www.')) {
-                part = window.location.protocol + part;
-            }
-            return part;
+            // Если начинается с '/' или 'www.'
+            return /^(\/|www\.)/.test(part) ? Loader.toAbsoluteUrl(part) : part;
         },
         _normalizeScriptUrl: function(url) {
             return this.rootUrl + url.toLowerCase() + '.js';
@@ -1284,13 +1302,14 @@
     // Определяем директорию со скриптами
     var scripts = document.getElementsByTagName('script'),
         rootRegEx = /(.*?)qb\/core\.js$/,
-        rootJS = '/static/js/';
+        rootJS;
     for (var i = 0, len = scripts.length; i < len; i++) {
-        if (rootJS = rootRegEx.exec(scripts[i].getAttribute('src'))) {
+        if (rootJS = rootRegEx.exec(scripts[i].src)) {
             rootJS = rootJS[1];
             break;
         }
     }
+    rootJS = rootJS || '/static/js/';
 
     var loader = new Loader(rootJS);
     loader.queryShortcuts.add({
@@ -1329,4 +1348,4 @@
 
     window.qb = qb;
 
-})(window, document);
+})(window, document, window.location);

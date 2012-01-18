@@ -78,6 +78,13 @@ test('"".parse', function() {
     });
 });
 
+test('qb.Loader.toAbsoluteUrl', function() {
+    var url = 'tests/data/scripts',
+        host = location.protocol + '//' + location.host,
+        absolute = qb.Loader.toAbsoluteUrl(url);
+    ok(absolute.startsWith(host) && absolute.endsWith(url), 'URL успешно преобразован: ' + absolute);
+});
+
 asyncTest('qb.require', 1, function() {
 
     var root = 'tests/data/scripts';
