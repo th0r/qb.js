@@ -1,10 +1,5 @@
 (function(window, document, location, undefined) {
 
-    var HOST = location.protocol + '//' + location.host,
-        LINK = document.createElement('a');
-
-    var qb = {};
-
     /**
      * Namespace - функция для создания областей видимости
      * @param {String} path  Строка вида "ns.ns1.ns2"
@@ -770,23 +765,24 @@
 
     /*----------   Реализация deferred-а DOMReady (аналог $(document).ready) ----------*/
     var DOMReady = new Deferred(),
-        resolve = DOMReady.resolve.bind(DOMReady);
+        windowLoad = new Deferred(),
+        ready = DOMReady.resolve.bind(DOMReady),
+        winLoaded = windowLoad.resolve.bind(windowLoad);
 
     if (document.readyState === 'complete') {
-        resolve();
+        ready();
+        winLoaded();
     } else if (document.addEventListener) {
-        DOMReady.done(function() {
-            document.removeEventListener('DOMContentLoaded', resolve);
-        });
-        document.addEventListener('DOMContentLoaded', resolve, false);
+        document.addEventListener('DOMContentLoaded', ready, false);
+        window.addEventListener('load', winLoaded, false);
     } else if (document.attachEvent) {
         var loaded = function() {
             if (document.readyState === 'complete') {
-                document.detachEvent('onreadystatechange', loaded);
-                resolve();
+                ready();
             }
         };
         document.attachEvent('onreadystatechange', loaded);
+        window.attachEvent('onload', winLoaded);
         // Хак для мониторинга загрузки DOM в IE
         try {
             var toplevel = (window.frameElement == null);
@@ -1109,7 +1105,7 @@
             this.resources = resources;
             this.loader = loader;
             this.args = exports ? exports.args : null;
-            this.flags = exports ? exports.flags : null;
+            this.flags = exports ? exports.flags : {};
             Deferred.when.apply(null, resources).then(
                 this._parseArgs.bind(this),
                 this._handleLoadError.bind(this)
@@ -1122,10 +1118,11 @@
         _callDeferredCallbacks: function(callbacks) {
             var flags = this.flags,
                 _super = Deferred.fn._callDeferredCallbacks.bind(this, callbacks);
-            flags && flags.ready ?
-            DOMReady.done(function() {
+            if (flags.ready || flags.load) {
+                (flags.ready ? DOMReady : windowLoad).done(_super);
+            } else {
                 _super();
-            }) : _super();
+            }
         },
         _parseArgs: function() {
             var args = this.args,
@@ -1151,6 +1148,7 @@
         EXPORTS_FLAGS = /(?:^|\|)\{(\w+)\}$/i;
 
     // Проверка, работает ли преобразование урла в абсолютный через установку href у ссылки (не работает в IE<8)
+    var LINK = document.createElement('a');
     LINK.href = 'a';
     if (LINK.href === 'a') {
         var DIV = document.createElement('div'),
@@ -1170,6 +1168,8 @@
         Static: {
             FULL_URL: /^https?:\/\//i,
             resources: {},
+            requires: 0,
+            ready: new Deferred(),
             toAbsoluteUrl: toAbsoluteUrl
         },
 
@@ -1178,20 +1178,28 @@
             this.queryShortcuts = new Shortcuts(',.:;/!}');
             this.exportShortcuts = new Shortcuts(',.:;');
         },
-        require: function(query/*, exports*/, callback/*, module*/) {
+        require: function(query, exports, callback, module) {
             var self = this,
                 resources = Loader.resources,
-                module = arguments[arguments.length - 1];
-            if (!Function.is(callback)) {
-                var exports = callback;
-                callback = arguments[2];
+                ready = Loader.ready;
+            if (arguments.length === 2) {
+                callback = exports;
+                exports = null;
             }
-            var callbacks = [callback];
+            var callbacks = Function.is(callback) ? [callback] : [];
             // Если указано название модуля, значит в модуле используется require и нужно отложить загрузку скрипта
-            if (typeof module === 'string') {
+            if (module) {
                 module = resources[this._normalizeScriptUrl(module)];
                 module.deferLoad();
                 callbacks.push(module.resolve.bind(module));
+            }
+            if (!ready.isResolved()) {
+                Loader.requires++;
+                callbacks.push(function() {
+                    if (--Loader.requires === 0) {
+                        ready.resolve();
+                    }
+                });
             }
             var urls = this._parseQuery(query),
                 handlers = urls.map(function(part) {
@@ -1323,7 +1331,12 @@
         'def': 'qb; document; window'
     });
 
-    /*----------   Проброс в глобальную область   ----------*/
+    /*----------   Создание основного объекта   ----------*/
+
+    function qb(handler) {
+        Loader.ready.done(handler);
+    }
+
     merge(qb, {
         // Утилиты
         ns: ns,
@@ -1333,6 +1346,7 @@
         when: Deferred.when,
         signals: signals,
         ready: DOMReady.done.bind(DOMReady),
+        load: windowLoad.done.bind(windowLoad),
         // Загрузчик
         Loader: Loader,
         loader: loader,
