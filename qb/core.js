@@ -1170,6 +1170,9 @@
         Static: {
             FULL_URL: /^https?:\/\//i,
             resources: {},
+            requires: 0,
+            ready: new Deferred(),
+            loadDelay: new Deferred(),
             toAbsoluteUrl: toAbsoluteUrl
         },
 
@@ -1178,7 +1181,18 @@
             this.queryShortcuts = new Shortcuts(',.:;/!}');
             this.exportShortcuts = new Shortcuts(',.:;');
         },
-        require: function(query/*, exports*/, callback/*, module*/) {
+        require: function() {
+            var self = this,
+                args = arguments;
+            Loader.requires++;
+            DOMReady.done(function() {
+                setTimeout(function() {
+                    self._require.apply(self, args);
+                }, 1);
+            });
+        },
+        _require: function(query/*, exports*/, callback/*, module*/) {
+            Loader.requires++;
             var self = this,
                 resources = Loader.resources,
                 module = arguments[arguments.length - 1];
@@ -1193,6 +1207,11 @@
                 module.deferLoad();
                 callbacks.push(module.resolve.bind(module));
             }
+            callbacks.push(function() {
+                if (--Loader.requires === 0) {
+                    Loader.ready.resolve();
+                }
+            });
             var urls = this._parseQuery(query),
                 handlers = urls.map(function(part) {
                     var _exports = ( part === this.last() ) ? self._parseExports(exports) : null;
@@ -1298,6 +1317,10 @@
             return result.clean();
         }
     });
+
+    setTimeout(function() {
+        Loader.loadDelay.resolve();
+    }, 300);
 
     // Определяем директорию со скриптами
     var scripts = document.getElementsByTagName('script'),
