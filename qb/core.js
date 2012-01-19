@@ -1107,21 +1107,20 @@
             this.args = exports ? exports.args : null;
             this.flags = exports ? exports.flags : {};
             Deferred.when.apply(null, resources).then(
-                this._parseArgs.bind(this),
+                this._handleLoad.bind(this),
                 this._handleLoadError.bind(this)
             );
         },
         load: function() {
             this.resources.forEachCall('load');
         },
-        // Переопределяет метод Deferred
-        _callDeferredCallbacks: function(callbacks) {
+        _handleLoad: function() {
             var flags = this.flags,
-                _super = Deferred.fn._callDeferredCallbacks.bind(this, callbacks);
+                parseArgs = this._parseArgs.bind(this);
             if (flags.ready || flags.load) {
-                (flags.ready ? DOMReady : windowLoad).done(_super);
+                (flags.ready ? DOMReady : windowLoad).done(parseArgs);
             } else {
-                _super();
+                parseArgs();
             }
         },
         _parseArgs: function() {
