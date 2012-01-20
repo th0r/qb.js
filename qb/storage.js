@@ -60,8 +60,9 @@
 
         function getAll(parse) {
             var res = {};
-            for (var key in storage) {
-                var val = get(key, parse);
+            for (var i = 0, len = storage.length; i < len; i++) {
+                var key = storage.key(i),
+                    val = get(key, parse);
                 if (val !== undefined) {
                     res[key] = val;
                 }
@@ -77,15 +78,6 @@
             return get(key) !== undefined;
         }
 
-        /**
-         * Удаляет протухшие записи из хранилища
-         */
-        function clean() {
-            for (var key in storage) {
-                get(key);
-            }
-        }
-
         // BUGFIX: в IE8 у методов localStorage нет "bind", объявленного в qb.core, поэтому его заюзать нельзя.
         function storageDecorator(method) {
             return function() {
@@ -93,7 +85,8 @@
             }
         }
 
-        clean();
+        // Удаляем протухшие записи из хранилища
+        getAll();
         qb.storage = {
             type: 'localStorage',
             set: set,
@@ -101,8 +94,7 @@
             all: getAll,
             has: has,
             remove: storageDecorator('removeItem'),
-            clear: storageDecorator('clear'),
-            clean: clean
+            clear: storageDecorator('clear')
         }
 
     } else {
@@ -147,8 +139,7 @@
                 all: getAll,
                 has: cookieDecorator('has', 1),
                 remove: cookieDecorator('remove', 1),
-                clear: clear,
-                clean: qb.pass
+                clear: clear
             }
 
         }, 'qb/storage');
