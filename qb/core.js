@@ -16,7 +16,7 @@
             }
         }
         part = parts[i];
-        // BUGFIX: тут иногда коробит IE ( window[document] = undefined || window[document] || {}; )
+        // BUGFIX: тут иногда коробит IE ( window['document'] = undefined || window['document'] || {}; )
         try {
             ns[part] = finalObj || ns[part] || {};
         } catch(e) {}
@@ -642,14 +642,16 @@
     });
 
     /*----------   Реализация Deferred   ----------*/
-    var UNRESOLVED = 0,
-        RESOLVED = 1,
-        REJECTED = 2;
+    var DEFERRED_STATUS = {
+        UNRESOLVED: 0,
+        RESOLVED: 1,
+        REJECTED: 2
+    };
 
     function makeCallbackMethod(prop, callStatus) {
         return function(callbacks) {
             var status = this.$status;
-            if (status === UNRESOLVED) {
+            if (status === DEFERRED_STATUS.UNRESOLVED) {
                 this[prop].append(Array.from(callbacks));
             } else if (status === callStatus || callStatus === true) {
                 this._callDeferredCallbacks(callbacks);
@@ -660,7 +662,7 @@
 
     function makeResolveMethod(prop, resolveStatus) {
         return function(/*args*/) {
-            if (this.$status === UNRESOLVED) {
+            if (this.$status === DEFERRED_STATUS.UNRESOLVED) {
                 this.$status = resolveStatus;
                 this.$args = Array.slice(arguments);
                 this._callDeferredCallbacks(this[prop].concat(this.$always));
@@ -674,7 +676,7 @@
 
     function makeResolveWithMethod(method) {
         return function(thisObj/*, args*/) {
-            if (this.$status === UNRESOLVED) {
+            if (this.$status === DEFERRED_STATUS.UNRESOLVED) {
                 this.$with = thisObj;
                 return this[method].apply(this, Array.slice(arguments, 1));
             }
@@ -683,7 +685,7 @@
 
     var Deferred = new Class({
         Name: 'Deferred',
-        Static: {
+        Static: merge({
             when: function(/*deferreds*/) {
                 var result = new Deferred(),
                     defs = Array.slice(arguments),
@@ -697,10 +699,7 @@
                 }
 
                 defs.forEach(function(def, i) {
-                    if (!(def instanceof Deferred)) {
-                        args[i] = def;
-                        unresolved--;
-                    } else {
+                    if (def instanceof Deferred) {
                         def.done(function() {
                             args[i] = Array.slice(arguments);
                             if (!--unresolved) {
@@ -708,6 +707,9 @@
                             }
                         });
                         def.fail(fail);
+                    } else {
+                        args[i] = def;
+                        unresolved--;
                     }
                 });
                 if (!unresolved) {
@@ -715,13 +717,13 @@
                 }
                 return result;
             }
-        },
+        }, DEFERRED_STATUS),
 
         init: function() {
             this.$done = [];
             this.$fail = [];
             this.$always = [];
-            this.$status = UNRESOLVED;
+            this.$status = DEFERRED_STATUS.UNRESOLVED;
             this.$with = this;
             this.$args = null;
         },
@@ -732,15 +734,15 @@
                 callback.apply(thisObj, args);
             });
         },
-        done: makeCallbackMethod('$done', RESOLVED),
-        fail: makeCallbackMethod('$fail', REJECTED),
+        done: makeCallbackMethod('$done', DEFERRED_STATUS.RESOLVED),
+        fail: makeCallbackMethod('$fail', DEFERRED_STATUS.REJECTED),
         then: function(doneCallbacks, failCallbacks) {
             return this.done(doneCallbacks).fail(failCallbacks);
         },
         always: makeCallbackMethod('$always', true),
-        resolve: makeResolveMethod('$done', RESOLVED),
+        resolve: makeResolveMethod('$done', DEFERRED_STATUS.RESOLVED),
         resolveWith: makeResolveWithMethod('resolve'),
-        reject: makeResolveMethod('$fail', REJECTED),
+        reject: makeResolveMethod('$fail', DEFERRED_STATUS.REJECTED),
         rejectWith: makeResolveWithMethod('reject'),
         pipe: function(doneFilter, failFilter) {
             var result = new Deferred();
@@ -754,14 +756,15 @@
                 }
             }, this);
             return result;
-        },
-        isResolved: function() {
-            return this.$status === RESOLVED;
-        },
-        isRejected: function() {
-            return this.$status === REJECTED;
         }
     });
+
+    // Делаем методы isResolved, isRejected и isUnresolved
+    each(DEFERRED_STATUS, function(statusVal, statusName) {
+        this['is' + statusName.toLowerCase().capitalize()] = function() {
+            return this.$status === statusVal;
+        }
+    }.bind(Deferred.prototype));
 
     /*----------   Реализация deferred-а DOMReady (аналог $(document).ready) ----------*/
     var DOMReady = new Deferred(),
@@ -793,7 +796,7 @@
                 try {
                     document.documentElement.doScroll('left');
                 } catch(e) {
-                    setTimeout(arguments.callee, 10);
+                    window.setTimeout(arguments.callee, 10);
                     return;
                 }
                 loaded();
@@ -936,7 +939,7 @@
         }
     });
 
-    var STATUS = {
+    var LOAD_STATUS = {
         UNLOADED: 0,
         LOADING: 1,
         LOADED: 2,
@@ -946,16 +949,17 @@
     var LoadingElement = new Class({
         Name: 'LoadingElement',
         Extends: Deferred,
+        Static: LOAD_STATUS,
 
         init: function(url) {
             Deferred.call(this);
             this.url = url;
             this.elem = null;
-            this.status = STATUS.UNLOADED;
+            this.status = LOAD_STATUS.UNLOADED;
         },
         load: function() {
-            if (this.status === STATUS.UNLOADED) {
-                this.status = STATUS.LOADING;
+            if (this.status === LOAD_STATUS.UNLOADED) {
+                this.status = LOAD_STATUS.LOADING;
                 this._createElem();
             }
         },
@@ -969,11 +973,11 @@
             throw 'Перегрузите этот метод. Здесь должен удаляться DOM-элемент';
         },
         resolve: function() {
-            this.status = STATUS.LOADED;
+            this.status = LOAD_STATUS.LOADED;
             Deferred.fn.resolve.call(this, this);
         },
         reject: function() {
-            this.status = STATUS.LOAD_ERROR;
+            this.status = LOAD_STATUS.LOAD_ERROR;
             Deferred.fn.reject.apply(this, arguments);
         }
     });
@@ -981,7 +985,7 @@
     var Stylesheet = new Class({
         Name: 'Stylesheet',
         Extends: LoadingElement,
-        Static: STATUS,
+        Static: LOAD_STATUS,
 
         init: function(url) {
             LoadingElement.call(this, url);
@@ -1019,7 +1023,7 @@
     var Script = new Class({
         Name: 'Script',
         Extends: LoadingElement,
-        Static: STATUS,
+        Static: LOAD_STATUS,
 
         init: function(url) {
             LoadingElement.call(this, url);
@@ -1192,7 +1196,7 @@
                 module.deferLoad();
                 callbacks.push(module.resolve.bind(module));
             }
-            if (!ready.isResolved()) {
+            if (ready.isUnresolved()) {
                 Loader.requires++;
                 callbacks.push(function() {
                     if (--Loader.requires === 0) {
@@ -1218,7 +1222,7 @@
                 required = urls.map(function(url) {
                     var resource = resources[url],
                         isCSS = this._isStylesheet(url);
-                    if (isReload && !isCSS && resource && resource.status === STATUS.LOADED) {
+                    if (isReload && !isCSS && resource && resource.status === LOAD_STATUS.LOADED) {
                         resource.destroy();
                         delete resources[url];
                     }

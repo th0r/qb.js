@@ -197,10 +197,10 @@ qb.require('jquery', 'qb: each, Class; qb; jQuery; document', function(each, Cla
             if (typeof info.context == 'string') {
                 // Ищем контекст по строке
                 var context = self.getContextElem(info.context);
-                if (!context) {
-                    throw new ViewError('NO_SUCH_CONTEXT', info);
-                } else {
+                if (context) {
                     info.context = context;
+                } else {
+                    throw new ViewError('NO_SUCH_CONTEXT', info);
                 }
             }
             return ( self[info.$prop] = info.context[info.handler](info.selector) );

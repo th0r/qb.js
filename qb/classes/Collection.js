@@ -1,6 +1,6 @@
 (function(qb, Class) {
 
-    var Collection = new qb.Class({
+    var Collection = new Class({
         Name: 'Collection',
         Extends: Array,
 
