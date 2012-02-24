@@ -67,7 +67,8 @@
         })
     }
 
-    var toString = Object.prototype.toString.thisToArg();
+    var _toString = Object.prototype.toString,
+        toString = _toString.thisToArg();
 
     /*----------   Расширение Function   ----------*/
     merge(Function, {
@@ -139,7 +140,7 @@
             return typeof obj === 'object' && obj !== null && !Array.is(obj);
         },
         isIteratable: function(obj) {
-            return obj && obj.length != null && typeof obj !== 'string' && !Function.is(obj);
+            return obj && (typeof obj.length === 'number') && typeof obj !== 'string' && !Function.is(obj);
         },
         keys: function(obj) {
             var keys = [];
@@ -181,6 +182,54 @@
                 }
             }, true);
             return newObj;
+        },
+        QB_MAX_DUMP_DEPTH: 10,
+        /**
+         * Преобразует объект в строку. Обходятся только собственные атрибуты объекта.
+         * @param obj  Преобразуемый объект любого типа.
+         * @param {Number|Boolean} [depth=1]  Глубина преобразования объекта, т.е. на сколько уровней функция будет
+         *                                    "погружаться" в объект, если его атрибутами являются другие объекты.
+         *                                    Если true, то берется максимальное значение (Object.QB_MAX_DUMP_DEPTH).
+         * @param {Number|String} [indent=0]  По-умолчанию объект преобразуется в одну строку.
+         *                                    Если указана строка, то результат будет многострочным и она будет использована
+         *                                    в качестве отступа для каждого нового уровня вложенности объекта.
+         *                                    Если указано число, то отспупом будет указанное кол-во пробелов.
+         */
+        dump: function(obj, depth, indent, _shift) {
+            indent = (indent > 0) ? ' '.repeat(indent) : indent || '';
+            _shift = _shift || '';
+            if (depth === true) {
+                depth = Object.QB_MAX_DUMP_DEPTH;
+            } else if (!depth && depth !== 0) {
+                depth = 1;
+            }
+            if (depth && (Object.is(obj) || Array.is(obj)) && !(obj instanceof RegExp)) {
+                var isArr = Array.is(obj),
+                    tail = (indent ? '\n' : ''),
+                    space = (indent ? ' ' : ''),
+                    fullIndent = _shift + indent,
+                    str = '';
+                each(obj, function(val, key) {
+                    str += (str ? ',' : '') + tail + fullIndent + (isArr ? '{val}' : '{key}:{val}').format({
+                        key: key,
+                        val: space + Object.dump(val, depth-1, indent, fullIndent)
+                    });
+                }, true);
+                str = (isArr ? '[]' : '{}').insert(1, (str ? str + tail + _shift : '' ));
+            } else {
+                if (typeof obj === 'string') {
+                    str = '"' + obj + '"';
+                } else if (Array.is(obj)) {
+                    str = '[' + obj + ']';
+                } else if (Function.is(obj)) {
+                    str = '{function}';
+                } else if (obj && obj.toString === _toString) {
+                    str = '{...}';
+                } else {
+                    str = '' + obj;
+                }
+            }
+            return str;
         }
     }, false, true);
     Object.is = Object.isObject;
@@ -350,6 +399,31 @@
             return this.replace(/^\s+/, '').replace(/\s+$/, '');
         },
         contains: Array.prototype.contains,
+        /**
+         * Вставляет подстроку в текущую строку.
+         * @param {Number} ind  Позиция, в которую вставить подстроку str.
+         *                      Может быть как положительная, так и отрицательная.
+         *                      Если указан отрицательный индекс, то позиция будет отсчитываться с конца текущей строки.
+         *                      Индекс -1 равносилен конкатенации строк.
+         * @param {String} str  Вставляемая строка.
+         */
+        insert: function(ind, str) {
+            ind = (ind < 0) ? Math.max(0, this.length + ind + 1) : ind;
+            return this.substr(0, ind) + str + this.substr(ind);
+        },
+        /**
+         * Повторяет строку несколько раз.
+         * @param {Number} times  Сколько раз повторить строку.
+         * @param {String} [separator='']  Строка-разделитель между повторениями.
+         */
+        repeat: function(times, separator) {
+            separator = separator || '';
+            var res = [];
+            for (var i = 0; i < times; i++) {
+                res.push(this);
+            }
+            return res.join(separator);
+        },
         format: function(replaceObj) {
             return this.replace(reFormatReplace, function(fullExpr, expr) {
                 if (expr) {
@@ -906,10 +980,15 @@
 
     var Shortcuts = new Class({
         Name: 'Shortcuts',
+        Static: {
+            MAX_DEPTH: 50
+        },
 
         init: function(edgeChars) {
             this.shortcuts = {};
-            this.edgeChars = edgeChars;
+            this.edgeChars = edgeChars.escapeRegexp();
+            // Служит для отслеживания бесконечной рекурсии
+            this.stack = [];
         },
         add: function(shortcuts) {
             var currentShortcuts = this.shortcuts;
@@ -932,10 +1011,24 @@
             this.regexp = regexp ? new RegExp(regexp, 'g') : null;
         },
         replaceIn: function(str) {
-            var shortcuts = this.shortcuts;
-            return this.regexp ? str.replace(this.regexp, function(_, left, shortcut) {
-                return left + shortcuts[shortcut];
-            }) : str;
+            var self = this,
+                shortcuts = this.shortcuts,
+                result = str,
+                stack = this.stack;
+            if (this.regexp) {
+                if (stack.length > Shortcuts.MAX_DEPTH) {
+                    var err = new Error('Бесконечная рекурсия при замене шорткатов в строке.\n' +
+                                        Object.dump(this, true, 4));
+                    err.name = 'qb-sc-recursion';
+                    throw err;
+                }
+                result = str.replace(this.regexp, function(_, left, shortcut) {
+                    stack.push(str + ': ' + shortcut);
+                    return left + self.replaceIn(shortcuts[shortcut]);
+                });
+                stack.pop();
+            }
+            return result;
         }
     });
 
@@ -967,10 +1060,10 @@
             this._removeElem();
         },
         _createElem: function() {
-            throw 'Перегрузите этот метод. Здесь должен создаваться DOM-элемент';
+            throw 'Перегрузите метод "_createElem". Здесь должен создаваться DOM-элемент';
         },
         _removeElem: function() {
-            throw 'Перегрузите этот метод. Здесь должен удаляться DOM-элемент';
+            throw 'Перегрузите метод "_removeElem". Здесь должен удаляться DOM-элемент';
         },
         resolve: function() {
             this.status = LOAD_STATUS.LOADED;
@@ -1043,7 +1136,7 @@
             LoadingElement.fn.resolve.call(this);
         },
         reject: function(message, file, line) {
-            var errorMsg = 'Error on line {1}: "{0}"'.format([message, line]);
+            var errorMsg = 'Ошибка в строке {1}: "{0}"'.format([message, line]);
             LoadingElement.fn.reject.call(this, errorMsg);
         },
         deferLoad: function() {
@@ -1143,7 +1236,7 @@
         },
         _handleLoadError: function(resource, error) {
             this.reject(resource, error);
-            throw 'Failed to load resource "{0}"\nError: "{1}"'.format(arguments);
+            throw 'Не удалось загрузить ресурс "{0}"\nОшибка: "{1}"'.format(arguments);
         }
     });
 
@@ -1359,6 +1452,7 @@
         Events: Events,
         Deferred: Deferred,
         Script: Script,
+        Shortcuts: Shortcuts,
         // Объект Debug-параметров
         debug: {}
     });

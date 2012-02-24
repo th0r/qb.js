@@ -85,15 +85,41 @@ test('qb.Loader.toAbsoluteUrl', function() {
     ok(absolute.startsWith(host) && absolute.endsWith(url), 'URL успешно преобразован: ' + absolute);
 });
 
+test('qb.Shortcuts', function() {
+    var sc = new qb.Shortcuts(',.:;/!}'),
+        str = 'http://[domain].ru/[path-to-script].js';
+
+    strictEqual(sc.replaceIn(str), str, 'Пустой объект шорткатов после обработки отдает исходную строку.');
+
+    sc.add({ '[domain]': 'grunin-ya'} );
+    strictEqual(sc.replaceIn(str), 'http://grunin-ya.ru/[path-to-script].js', 'Шорткаты заменяются корректно.');
+
+    sc.add({
+        '[path-to-script]': '[PATH1]/{path2}/script',
+        '[path1]': 'incorrect',
+        '[PATH1]': 'correct',
+        '{path2}': 'path/{{to}}',
+        '{{to}}': 'to',
+        'script': 'qb.core'
+    });
+    strictEqual(sc.replaceIn(str), 'http://grunin-ya.ru/correct/path/to/qb.core.js', 'Вложенные шорткаты заменяются корректно.');
+
+    sc.add({ '{{to}}': 'recursive/[path-to-script]' });
+    var result;
+    raises(function() {
+        result = sc.replaceIn(str);
+    }, function(err) {
+        return err.name === 'qb-sc-recursion' && /stack:.*?\[[\s\S]+?\]/i.test(err.message);
+    }, 'Рекурсия в шорткатах поймалась. Информация об ошибке в сообщении есть.');
+});
+
 asyncTest('qb.require', 1, function() {
 
-    var root = 'tests/data/scripts';
     qb.loader.queryShortcuts.add({
-        'test': root,
-        'priority': root + '/priority'
+        'PRIORITY': 'tests/data/scripts/priority'
     });
 
-    qb.require('{3}priority/c(a+b), {2}priority/b(a), {1}priority/a', function() {
+    qb.require('{3}PRIORITY/c(a+b), {2}PRIORITY/b(a), {1}PRIORITY/a', function() {
         deepEqual(a, {
             b: {
                 c: {}
