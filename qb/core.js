@@ -392,7 +392,14 @@
             'false': false,
             'null': null,
             'NaN': NaN
-        };
+        },
+        HTML_ESCAPE_MAP = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '"': '&quote;',
+            "'": '&#39;'
+        },
+        HTML_ESCAPE_REGEX = new RegExp('[' + Object.keys(HTML_ESCAPE_MAP).join('') + ']', 'g');
 
     merge(String.prototype, {
         trim: function() {
@@ -446,8 +453,10 @@
         escapeRegexp: function() {
             return this.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&');
         },
-        escapeHTML: function() {
-            return this.replace('&', '$amp;').replace('<', '&lt;').replace('"', '&quote;').replace("'", '&apos;');
+        escapeHtml: function() {
+            return this.replace(HTML_ESCAPE_REGEX, function(ch) {
+                return HTML_ESCAPE_MAP[ch];
+            });
         },
         /**
          * Преобразует строку в примитивы
@@ -1249,7 +1258,7 @@
     if (LINK.href === 'a') {
         var DIV = document.createElement('div'),
             toAbsoluteUrl = function(url) {
-                DIV.innerHTML = '<a href="' + url.escapeHTML() + '"></a>';
+                DIV.innerHTML = '<a href="' + url.escapeHtml() + '"></a>';
                 return DIV.firstChild.href;
             };
     } else {
