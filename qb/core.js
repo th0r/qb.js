@@ -1283,11 +1283,37 @@
             this.queryShortcuts = new Shortcuts(',.:;/!}');
             this.exportShortcuts = new Shortcuts(',.:;');
         },
+        /**
+         * Загрузчик ресурсов (см. описание Loader)
+         * Возможные варианты вызова:
+         *   1) Простая загрузка ресурсов:
+         *       require(resources)
+         *   2) Загрузка ресурсов и вызов колбэка
+         *       require(resources, callback)
+         *   3) Загрузка ресурсов с экспортом необходимых объектов в колбэк
+         *       require(resources, exports, callback)
+         *   4) Объявление модуля с зависимостями
+         *       require(dependances, callback, module)
+         *   5) Объявление модуля с зависимостями и экспорт необходимых объектов в колбэк
+         *       require(dependances, exports, callback, module)
+         * @param query  Строка запроса загрузчика
+         * @param {String} [exports]  Строка экспорта
+         * @param {Function} [callback]  Функция, вызываемая после загрузки всех ресурсов.
+         * @param {String} [module]  Название текущего модуля.
+         *                           Используется в модулях, которые зависят от других ресурсов.
+         */
         require: function(query, exports, callback, module) {
             var self = this,
                 resources = Loader.resources,
-                ready = Loader.ready;
-            if (arguments.length === 2) {
+                ready = Loader.ready,
+                argsLen = arguments.length;
+            if (argsLen === 2) {
+                // require(query, callback)
+                callback = exports;
+                exports = null;
+            } else if (argsLen === 3 && typeof callback === 'string') {
+                // require(query, callback, module)
+                module = callback;
                 callback = exports;
                 exports = null;
             }
