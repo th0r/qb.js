@@ -830,7 +830,7 @@
         pipe: function(doneFilter, failFilter) {
             var result = new Deferred();
             [doneFilter, failFilter].forEach(function(filter, i) {
-                if (filter) {
+                if (Function.is(filter)) {
                     this[i ? 'fail' : 'done'](function() {
                         var args = Array.from(filter.apply(this, arguments));
                         args.unshift(this);
