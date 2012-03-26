@@ -78,10 +78,10 @@ test('"".parse', function() {
     });
 });
 
-test('qb.Loader.toAbsoluteUrl', function() {
+test('"".toAbsoluteUrl', function() {
     var url = 'tests/data/scripts',
         host = location.protocol + '//' + location.host,
-        absolute = qb.Loader.toAbsoluteUrl(url);
+        absolute = url.toAbsoluteUrl();
     ok(absolute.startsWith(host) && absolute.endsWith(url), 'URL успешно преобразован: ' + absolute);
 });
 

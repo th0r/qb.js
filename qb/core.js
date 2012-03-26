@@ -70,6 +70,23 @@
     var _toString = Object.prototype.toString,
         toString = _toString.thisToArg();
 
+    // Метод для преобразования относительного урла в абсолютный
+    // Проверка, работает ли преобразование урла в абсолютный через установку href у ссылки (не работает в IE<8)
+    var LINK = document.createElement('a');
+    LINK.href = 'a';
+    if (LINK.href === 'a') {
+        var DIV = document.createElement('div'),
+            toAbsoluteUrl = function(url) {
+                DIV.innerHTML = '<a href="' + url.escapeHtml() + '"></a>';
+                return DIV.firstChild.href;
+            };
+    } else {
+        toAbsoluteUrl = function(url) {
+            LINK.href = url;
+            return LINK.href;
+        }
+    }
+
     /*----------   Расширение Function   ----------*/
     merge(Function, {
         isFunction: function(obj) {
@@ -477,6 +494,9 @@
                 }
             }
             return result;
+        },
+        toAbsoluteUrl: function() {
+            return toAbsoluteUrl(this);
         }
     }, false, true);
 
@@ -1250,34 +1270,17 @@
     var PARTS_PRIORITY = /^!|^\{(\d+)}/i,
         EXPORTS_FLAGS = /(?:^|\|)\{(\w+)\}$/i;
 
-    // Проверка, работает ли преобразование урла в абсолютный через установку href у ссылки (не работает в IE<8)
-    var LINK = document.createElement('a');
-    LINK.href = 'a';
-    if (LINK.href === 'a') {
-        var DIV = document.createElement('div'),
-            toAbsoluteUrl = function(url) {
-                DIV.innerHTML = '<a href="' + url.escapeHtml() + '"></a>';
-                return DIV.firstChild.href;
-            };
-    } else {
-        toAbsoluteUrl = function(url) {
-            LINK.href = url;
-            return LINK.href;
-        }
-    }
-
     var Loader = new Class({
         Name: 'Loader',
         Static: {
             FULL_URL: /^https?:\/\//i,
             resources: {},
             requires: 0,
-            ready: new Deferred(),
-            toAbsoluteUrl: toAbsoluteUrl
+            ready: new Deferred()
         },
 
         init: function(rootUrl) {
-            this.rootUrl = Loader.toAbsoluteUrl(rootUrl).toLowerCase();
+            this.rootUrl = toAbsoluteUrl(rootUrl).toLowerCase();
             this.queryShortcuts = new Shortcuts(',.:;/!}');
             this.exportShortcuts = new Shortcuts(',.:;');
         },
@@ -1352,7 +1355,7 @@
                         resource.destroy();
                         delete resources[url];
                     }
-                    return ( resources[url] = resources[url] || new (isCSS ? Stylesheet : Script)(url) );
+                    return (resources[url] = resources[url] || new (isCSS ? Stylesheet : Script)(url));
                 }, this);
             return new Handler(this, required, exports);
         },
@@ -1362,11 +1365,11 @@
                 fullUrl = Loader.FULL_URL;
             parts.forEach(function(part) {
                 if (part) {
-                    var url = this._parsePriority(part),
-                        _part = this._normalizePart(url.part);
+                    var partInfo = this._parsePriority(part),
+                        url = this._normalizePart(partInfo.part);
                     // Начинается с "http://" или "https://"
-                    if (fullUrl.test(_part)) {
-                        urls[_part] = url.priority;
+                    if (fullUrl.test(url)) {
+                        urls[url] = partInfo.priority;
                     } else {
                         part = this.queryShortcuts.replaceIn(part);
                         merge(urls, this._parsePart(part));
@@ -1380,7 +1383,8 @@
                 urls = {};
             chunks.forEach(function(chunk) {
                 var info = this._parsePriority(chunk),
-                    url = this._isStylesheet(info.part) ? info.part : this._normalizeScriptUrl(info.part);
+                    part = info.part,
+                    url = this._isStylesheet(part) ? toAbsoluteUrl(part) : this._normalizeScriptUrl(part);
                 urls[url] = info.priority;
             }, this);
             return urls;
@@ -1414,9 +1418,8 @@
             }
         },
         _normalizePart: function(part) {
-            part = part.toLowerCase();
             // Если начинается с '/' или 'www.'
-            return /^(\/|www\.)/.test(part) ? Loader.toAbsoluteUrl(part) : part;
+            return /^(\/|www\.)/i.test(part) ? toAbsoluteUrl(part) : part.toLowerCase();
         },
         _normalizeScriptUrl: function(url) {
             return this.rootUrl + url.toLowerCase() + '.js';
