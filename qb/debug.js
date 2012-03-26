@@ -1,3 +1,11 @@
+/**
+ * DOM-консоль для отладки скриптов.
+ * Удобно использовать в браузерах с отсутствующей/неудобной/неинформативной консолью.
+ * Управление:
+ *   - (Клик на контроле со стрелкой) - скрытие/раскрытие консоли
+ *   - (Ctrl/Cmd + Клик на контроле со стрелкой) - смена положения консоли (сверху/справа)
+ *   - (Ctrl/Cmd + Движение мышью над консолью) - изменение размера консоли
+ */
 qb.require('qb/storage; CSS/qb/debug.css', 'qb.storage', function(storage) {
 
     var CONSOLE_HIDDEN_CLASS = 'qb-console-wrap-hidden',
@@ -27,7 +35,7 @@ qb.require('qb/storage; CSS/qb/debug.css', 'qb.storage', function(storage) {
         var lastChild = consoleElem.lastChild;
         lastChild && lastChild.scrollIntoView(true);
         if (save) {
-            flag ? storage.remove(STORAGE_HIDDEN) : storage.set(STORAGE_HIDDEN);
+            storage[flag ? 'remove' : 'set'](STORAGE_HIDDEN);
         }
         toggler.innerHTML = TOGGLE_ARROWS[+consoleVertical][+flag];
     }
@@ -95,12 +103,20 @@ qb.require('qb/storage; CSS/qb/debug.css', 'qb.storage', function(storage) {
         document.body.appendChild(consoleWrap);
     });
 
-    var timers = {};
+    var timers = {},
+        config = qb.config.debug = {
+            depth: 3,
+            indent: 2
+        };
 
     var qbConsole = {
         log: function() {
-            var msg = Object.dump.apply(null, arguments),
-                line = document.createElement('div');
+            var msg = [];
+            qb.each(arguments, function(arg) {
+                msg.push(Object.dump(arg, config.depth, config.indent));
+            });
+            msg = msg.join('\n\n');
+            var line = document.createElement('div');
             line.className = 'qb-console-line';
             if (INNER_TEXT_SUPPORT) {
                 line.innerText = msg;

@@ -1489,7 +1489,9 @@
         Script: Script,
         Shortcuts: Shortcuts,
         // Объект Debug-параметров
-        debug: {}
+        debug: {},
+        // Объект конфигурационных параметров
+        config: {}
     });
 
     window.qb = qb;
