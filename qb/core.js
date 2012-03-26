@@ -1026,7 +1026,7 @@
                 stack = this.stack;
             if (this.regexp) {
                 if (stack.length > Shortcuts.MAX_DEPTH) {
-                    var err = new Error('Бесконечная рекурсия при замене шорткатов в строке.\n' +
+                    var err = new Error('Endless recursion during shortcuts replacing.\n' +
                                         Object.dump(this, true, 4));
                     err.name = 'qb-sc-recursion';
                     throw err;
@@ -1068,12 +1068,10 @@
         destroy: function() {
             this._removeElem();
         },
-        _createElem: function() {
-            throw 'Перегрузите метод "_createElem". Здесь должен создаваться DOM-элемент';
-        },
-        _removeElem: function() {
-            throw 'Перегрузите метод "_removeElem". Здесь должен удаляться DOM-элемент';
-        },
+        // Этот метод должен быть перезагружен. Здесь должен создаваться DOM-элемент.
+        _createElem: pass,
+        // Этот метод должен быть перезагружен. Здесь должен удаляться DOM-элемент.
+        _removeElem: pass,
         resolve: function() {
             this.status = LOAD_STATUS.LOADED;
             Deferred.fn.resolve.call(this, this);
@@ -1145,7 +1143,7 @@
             LoadingElement.fn.resolve.call(this);
         },
         reject: function(message, file, line) {
-            var errorMsg = 'Ошибка в строке {1}: "{0}"'.format([message, line]);
+            var errorMsg = (typeof message === 'string') ? 'Error in line {1}: "{0}"'.format([message, line]) : '<no info>';
             LoadingElement.fn.reject.call(this, errorMsg);
         },
         deferLoad: function() {
@@ -1245,7 +1243,7 @@
         },
         _handleLoadError: function(resource, error) {
             this.reject(resource, error);
-            throw 'Не удалось загрузить ресурс "{0}"\nОшибка: "{1}"'.format(arguments);
+            throw 'Failed to load resource "{0}"\nError info: "{1}"'.format(arguments);
         }
     });
 
