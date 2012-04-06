@@ -140,6 +140,15 @@ qb.require('qb/storage; CSS/qb/debug.css', 'qb.storage', function(storage) {
                 }));
                 delete timers[name];
             }
+        },
+
+        timeStamp: function(msg) {
+            var now = new Date();
+            this.log('{time}.{ms} {msg}'.format({
+                time: now.toLocaleTimeString(),
+                ms: now.getMilliseconds(),
+                msg: msg
+            }));
         }
     };
 
