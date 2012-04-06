@@ -506,7 +506,7 @@
             return +new Date();
         },
         isDate: function(obj) {
-            return ( toString(obj) === '[object Date]' );
+            return (toString(obj) === '[object Date]');
         }
     }, false, true);
     Date.is = Date.isDate;
@@ -604,7 +604,6 @@
         delete info.Extends;
         delete info.Implements;
         delete info.Static;
-        delete info.init;
         merge(proto, info, true);
         proto.constructor = constructor;
 
@@ -696,7 +695,7 @@
                 // Если указано 'click.someNS' и handler, то удаляем этот хэндлер на click из этой ns
                 if (handler) {
                     var handlers = ns[name];
-                    if (handlers && handlers.length) {
+                    if (handlers) {
                         for (var i = 0, len = handlers.length; i < len; i++) {
                             if (handlers[i][0] === handler) {
                                 handlers.splice(i--, 1);
@@ -704,8 +703,8 @@
                             }
                         }
                     }
-                    // Если указано 'click.someNS' без handler-а, то удаляем все хэндлеры на click из этой ns
                 } else {
+                    // Если указано 'click.someNS' без handler-а, то удаляем все хэндлеры на click из этой ns
                     delete ns[name];
                 }
             }
@@ -754,7 +753,7 @@
     function makeCallbackMethod(prop, callStatus) {
         return function(callbacks) {
             var status = this.$status;
-            if (status === DEFERRED_STATUS.UNRESOLVED) {
+            if (this.isUnresolved()) {
                 this[prop].append(Array.from(callbacks));
             } else if (status === callStatus || callStatus === true) {
                 this._callDeferredCallbacks(callbacks);
@@ -765,7 +764,7 @@
 
     function makeResolveMethod(prop, resolveStatus) {
         return function(/*args*/) {
-            if (this.$status === DEFERRED_STATUS.UNRESOLVED) {
+            if (this.isUnresolved()) {
                 this.$status = resolveStatus;
                 this.$args = Array.slice(arguments);
                 this._callDeferredCallbacks(this[prop].concat(this.$always));
@@ -779,7 +778,7 @@
 
     function makeResolveWithMethod(method) {
         return function(thisObj/*, args*/) {
-            if (this.$status === DEFERRED_STATUS.UNRESOLVED) {
+            if (this.isUnresolved()) {
                 this.$with = thisObj;
                 return this[method].apply(this, Array.slice(arguments, 1));
             }
@@ -1022,7 +1021,7 @@
         add: function(shortcuts) {
             var currentShortcuts = this.shortcuts;
             each(shortcuts, function(value, shortcut) {
-                currentShortcuts[shortcut] = normalizeQuery(value);
+                currentShortcuts[shortcut] = removeWhitespaces(value);
             });
             this._generateRegexp();
         },
@@ -1061,6 +1060,34 @@
         }
     });
 
+    /**
+     * Объект, рассылающий события прогресса загрузки ресурсов.
+     * Можно использовать для отображение прогресс-бара.
+     * События посылаются объектом qb.signals:
+     *   - "loader-start" при начале загрузки ресурсов
+     *   - "loader-step" при изменении прогресса загрузки. В обработчик прокидываются 2 аргумента:
+     *       1) количество загруженных на данный момент ресурсов
+     *       2) общее количество загружаемых ресурсов
+     *   - "loader-finish" при окончании загрузки. В аргументе передается количество загруженных ресурсов.
+     */
+    var progress = {
+        loaded: 0,
+        total: 0,
+        started: function() {
+            if (!this.total++) {
+                signals.send('loader-start');
+            }
+        },
+        finished: function() {
+            this.loaded++;
+            signals.send('loader-step', [this.loaded, this.total]);
+            if (this.loaded >= this.total) {
+                signals.send('loader-finish', [this.total]);
+                this.loaded = this.total = 0;
+            }
+        }
+    };
+
     var LOAD_STATUS = {
         UNLOADED: 0,
         LOADING: 1,
@@ -1082,6 +1109,7 @@
         load: function() {
             if (this.status === LOAD_STATUS.UNLOADED) {
                 this.status = LOAD_STATUS.LOADING;
+                progress.started();
                 this._createElem();
             }
         },
@@ -1094,10 +1122,12 @@
         _removeElem: pass,
         resolve: function() {
             this.status = LOAD_STATUS.LOADED;
+            progress.finished();
             Deferred.fn.resolve.call(this, this);
         },
         reject: function() {
             this.status = LOAD_STATUS.LOAD_ERROR;
+            progress.finished();
             Deferred.fn.reject.apply(this, arguments);
         }
     });
@@ -1187,11 +1217,11 @@
     });
 
     /**
-     * Нормализует строку запроса (удаляет все пробельные символы)
+     * Удаляет все пробельные символы
      * @param {String} query  Строка запроса
      * @returns {String}
      */
-    function normalizeQuery(query) {
+    function removeWhitespaces(query) {
         return query.replace(/\s/g, '');
     }
 
@@ -1201,7 +1231,7 @@
      * @returns {Array}
      */
     function splitQuery(query) {
-        return query.split(';').clean();
+        return query.split('; ').clean();
     }
 
     /**
@@ -1268,19 +1298,19 @@
     });
 
     var PARTS_PRIORITY = /^!|^\{(\d+)}/i,
-        EXPORTS_FLAGS = /(?:^|\|)\{(\w+)\}$/i;
+        EXPORTS_FLAGS = /(?:^|\|)\{([\w,]+)\}$/i;
 
     var Loader = new Class({
         Name: 'Loader',
         Static: {
-            FULL_URL: /^https?:\/\//i,
+            FULL_URL: /^(https?:\/\/|\/)/i,
             resources: {},
             requires: 0,
             ready: new Deferred()
         },
 
         init: function(rootUrl) {
-            this.rootUrl = toAbsoluteUrl(rootUrl).toLowerCase();
+            this.rootUrl = toAbsoluteUrl(rootUrl);
             this.queryShortcuts = new Shortcuts(',.:;/!}');
             this.exportShortcuts = new Shortcuts(',.:;');
         },
@@ -1359,24 +1389,25 @@
                 }, this);
             return new Handler(this, required, exports);
         },
-        _parseQuery: function(query) {
-            var parts = (typeof query === 'string') ? splitQuery(normalizeQuery(query)) : query,
-                urls = {},
-                fullUrl = Loader.FULL_URL;
+        _parseQuery: function(query, _subcall) {
+            var parts = (typeof query === 'string') ? splitQuery(query) : query,
+                urls = {};
             parts.forEach(function(part) {
                 if (part) {
-                    var partInfo = this._parsePriority(part),
-                        url = this._normalizePart(partInfo.part);
-                    // Начинается с "http://" или "https://"
-                    if (fullUrl.test(url)) {
-                        urls[url] = partInfo.priority;
+                    part = part.trim();
+                    var priorityInfo = this._parsePriority(part),
+                        partInfo = this._getPartInfo(priorityInfo.part);
+                    if (partInfo.isUrl) {
+                        urls[partInfo.part] = priorityInfo.priority;
                     } else {
-                        part = this.queryShortcuts.replaceIn(part);
-                        merge(urls, this._parsePart(part));
+                        if (!_subcall) {
+                            part = this.queryShortcuts.replaceIn(part);
+                        }
+                        merge(urls, (_subcall ? this._parsePart(part) : this._parseQuery(part, true)));
                     }
                 }
             }, this);
-            return this._prioritizeUrls(urls);
+            return _subcall ? urls : this._prioritizeUrls(urls);
         },
         _parsePart: function(part) {
             var chunks = splitPart(part.toLowerCase(), '/'),
@@ -1402,24 +1433,37 @@
         },
         _parseExports: function(exports) {
             if (exports) {
-                var flags = {},
-                    args = normalizeQuery(exports).replace(EXPORTS_FLAGS, function(_, _flags) {
-                        _flags.split(',').forEach(function(flag) {
-                            this[flag] = true;
-                        }, flags);
+                var flags,
+                    args = removeWhitespaces(exports).replace(EXPORTS_FLAGS, function(_, _flags) {
+                        flags = _flags.split(',').toObject();
                         return '';
                     });
                 return {
                     args: args || null,
-                    flags: flags
+                    flags: flags || {}
                 }
             } else {
                 return null;
             }
         },
-        _normalizePart: function(part) {
-            // Если начинается с '/' или 'www.'
-            return /^(\/|www\.)/i.test(part) ? toAbsoluteUrl(part) : part.toLowerCase();
+        /**
+         * Проверяет, является ли эта часть запроса абсолютным урлом (см. описание Loader)
+         * @param part  Проверяемая часть запроса
+         * @return {Object} info  Объект с информацией о парте
+         * @return {String} info.part  Если парт определился, как абсолютный урл, то возвращается нормализованный урл
+         *                             (добавляется протокол, доменная часть приводится к lowercase и т.д.).
+         *                             Иначе возвращается исходный необработанный парт.
+         * @return {Boolean} info.isUrl  Флаг, определился ли парт как урл или нет
+         */
+        _getPartInfo: function(part) {
+            var info = {};
+            if (part.startsWith('www.')) {
+                info.part = 'http://' + part;
+                var isUrl = true;
+            }
+            info.isUrl = isUrl = isUrl || Loader.FULL_URL.test(part);
+            info.part = isUrl ? toAbsoluteUrl(part) : part;
+            return info;
         },
         _normalizeScriptUrl: function(url) {
             return this.rootUrl + url.toLowerCase() + '.js';
