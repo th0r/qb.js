@@ -923,7 +923,7 @@
      *    в объект qb: qb.loader.require === qb.require. Это сделано для удобства.
      *
      *    Для использования данного метода, ему нужно передать строку запроса ресурсов или же массив частей строки запроса (см. ниже).
-     *    Части запроса отделяются друг от друга символом точки с запятой (;).
+     *    Части запроса отделяются друг от друга строкой "; " (пробел обязателен!).
      *
      *    Пример простого запроса:
      *      qb.require('qb/cookie', callbackFn) ==> загрузит модуль (скрипт) '/static/js/qb/cookie.js' и после этого вызовет callbackFn
@@ -962,8 +962,10 @@
      *      });
      *    Есть несколько правил использования шорткатов:
      *      1) Шорткаты регистро-зависимы. Т.е. 'cls' и 'CLS' - разные шорткаты.
-     *      2) В описании шортката нельзя использовать другие шорткаты (они не заменятся).
-     *      3) Шорткаты в строке запроса заменяются только в случае, если они окружены спец-символами ,.:;/!}
+     *      2) В описании шортката можно использовать другие шорткаты.
+     *         Они подменяются на этапе использования шортката, а не на этапе его добавления.
+     *         В случае бесконечной рекурсивной замены шорткатов будет вызвана ошибка с подробной информацией.
+     *      3) Шорткаты в строке запроса заменяются только в случае, если они окружены символами ",.:;/!} "
      *         или находятся в начале/конце строки запроса.
      *
      *    *** Очередь загрузки ***
@@ -980,7 +982,7 @@
      *    Вместо указания очередности "{1}" можно указывать знак "!" (это сделано для удобства)
      *
      *    *** Строка экспорта ***
-     *    После загрузки всех указанных в строке запроса ресурсов обязательно вызывается callback.
+     *    После загрузки всех указанных в строке запроса ресурсов вызывается callback (если он указан).
      *    Для удобства, в него в качестве параметров можно пробросить указанные в строке экспорта объекты (указание
      *    строки экспорта - опционально).
      *    Пример:
@@ -990,15 +992,18 @@
      *    Шорткаты экспорта находятся в объекте exportShortcuts загрузчика (qb.loader.exportShortcuts).
      *    Для их добавления так же используется метод "add".
      *    При использовании шорткатов экспорта действуют все те же правила, что и для шорткатов запроса.
-     *    Различаются только спец-символы - для шорткатов экспорта это ,.:;
+     *    Различаются только спец-символы - для шорткатов экспорта это символы ",.:; "
      *
-     *    Также в строке экспорта можно использовать флаги. Сейчас поддерживается один флаг - "ready".
-     *    Если он указан, callback будет вызван только после загрузки всех ресурсов И после загрузки
-     *    страницы (аналог $(document).ready() ).
+     *    Также в строке экспорта можно использовать флаги.
      *    Флаги указываются следующим образом (показана строка экспорта):
      *      '<export_string> | {flag1, flag2...flagN}'
+     *    Поддерживаемые флаги:
+     *      ready: callback будет вызван только после загрузки всех ресурсов и после готовности DOM-дерева (аналог $(document).ready() ).
+     *      load: callback будет вызван только после загрузки всех ресурсов и после полной загрузки страницы (на window.onload).
+     *            Если вместе с load указан флаг ready, то load имеет приоритет.
+     *      reload: все ресурсы, указанные в строке запроса будут принудительно перезагружены.
      *    Пример:
-     *      '$; $.growl | {ready}'
+     *      '$; $.growl | {ready, reload}'
      *
      *    Также есть возможность в строке экспорта указать ТОЛЬКО флаги. Тогда она будет выглядеть так:
      *      '{ready}'
@@ -1021,7 +1026,7 @@
         add: function(shortcuts) {
             var currentShortcuts = this.shortcuts;
             each(shortcuts, function(value, shortcut) {
-                currentShortcuts[shortcut] = removeWhitespaces(value);
+                currentShortcuts[shortcut] = value;
             });
             this._generateRegexp();
         },
@@ -1222,7 +1227,7 @@
      * @returns {String}
      */
     function removeWhitespaces(query) {
-        return query.replace(/\s/g, '');
+        return query.replace(/\s+/g, '');
     }
 
     /**
@@ -1230,8 +1235,8 @@
      * @param {String} query  Строка запроса
      * @returns {Array}
      */
-    function splitQuery(query) {
-        return query.split('; ').clean();
+    function splitQuery(query, splitter) {
+        return query.split(splitter).clean();
     }
 
     /**
@@ -1272,7 +1277,8 @@
             var flags = this.flags,
                 parseArgs = this._parseArgs.bind(this);
             if (flags.ready || flags.load) {
-                (flags.ready ? DOMReady : windowLoad).done(parseArgs);
+                // Очередность важна - флаг load имеет приоритет
+                (flags.load ? windowLoad : DOMReady).done(parseArgs);
             } else {
                 parseArgs();
             }
@@ -1282,8 +1288,8 @@
                 exports = [];
             if (args) {
                 // Заменяем шорткаты
-                args = this.loader.exportShortcuts.replaceIn(args);
-                splitQuery(args).forEach(function(part) {
+                args = removeWhitespaces(this.loader.exportShortcuts.replaceIn(args));
+                splitQuery(args, ';').forEach(function(part) {
                     splitPart(part, '.').forEach(function(_export) {
                         this.push(ns(_export));
                     }, exports);
@@ -1311,8 +1317,8 @@
 
         init: function(rootUrl) {
             this.rootUrl = toAbsoluteUrl(rootUrl);
-            this.queryShortcuts = new Shortcuts(',.:;/!}');
-            this.exportShortcuts = new Shortcuts(',.:;');
+            this.queryShortcuts = new Shortcuts(',.:;/!} ');
+            this.exportShortcuts = new Shortcuts(',.:; ');
         },
         /**
          * Загрузчик ресурсов (см. описание Loader)
@@ -1390,7 +1396,7 @@
             return new Handler(this, required, exports);
         },
         _parseQuery: function(query, _subcall) {
-            var parts = (typeof query === 'string') ? splitQuery(query) : query,
+            var parts = (typeof query === 'string') ? splitQuery(query, '; ') : query,
                 urls = {};
             parts.forEach(function(part) {
                 if (part) {
@@ -1410,7 +1416,7 @@
             return _subcall ? urls : this._prioritizeUrls(urls);
         },
         _parsePart: function(part) {
-            var chunks = splitPart(part.toLowerCase(), '/'),
+            var chunks = splitPart(removeWhitespaces(part), '/'),
                 urls = {};
             chunks.forEach(function(chunk) {
                 var info = this._parsePriority(chunk),
@@ -1469,7 +1475,7 @@
             return this.rootUrl + url.toLowerCase() + '.js';
         },
         _isStylesheet: function(url) {
-            return url.endsWith('.css');
+            return /\.css$/i.test(url);
         },
         _prioritizeUrls: function(urls) {
             var result = [];
