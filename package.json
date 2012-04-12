@@ -1,0 +1,17 @@
+{
+    "name": "qb",
+    "version": "0.5.0",
+    "author": "Grunin Yury <grunin.ya@ya.ru>",
+    "repository": {
+        "type": "git",
+        "url": "https://th0r@github.com/th0r/qb.js.git"
+    },
+    "dependencies": {
+        "ejs": ">=0.7.1",
+        "uglify-js": "*"
+    },
+    "scripts": {
+        "install": "node build.js --compress"
+    },
+    "private": true
+}

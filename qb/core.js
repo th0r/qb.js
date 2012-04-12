@@ -1,5 +1,8 @@
 (function(window, document, location, undefined) {
 
+/*. // ns
+    if (ns) {
+-.*/
     /**
      * Namespace - функция для создания областей видимости
      * @param {String} path  Строка вида "ns.ns1.ns2"
@@ -22,6 +25,7 @@
         } catch(e) {}
         return ns[part];
     }
+/*. } -.*/
 
     /*----------   Основные утилиты   ----------*/
 
@@ -177,30 +181,9 @@
             }
             return values;
         },
-        /**
-         * Делает новый объект на основе указанного.
-         * @param {Object|Array} obj  Итерируемый объект, из которого нужно создать новый объект.
-         * @param {Function} fn  Обработчик объекта. Вызывается для каждого ключа исходного объекта.
-         *                       Контекст - создаваемый объект. Параметры - ключ исходного объекта, значение ключа, исходный объект.
-         *                       Если из функции возвращается стока (str), то в новый объект записывается ключ str со значением из
-         *                       исходного объекта.
-         *                       Если возвращаемое значение не строка и интерпретируется как true, то в новый объект записывается
-         *                       исходный ключ с исходным значением.
-         *                       Если возвращаемое значение не строка и интерпретируется как false, ключ в новый объект не попадает.
-         */
-        makeFrom: function(obj, fn) {
-            var newObj = {};
-            each(obj, function(val, key) {
-                var res = fn.call(newObj, key, val, this);
-                if (typeof res === 'string') {
-                    newObj[res] = val;
-                } else if (res) {
-                    newObj[key] = val;
-                }
-            }, true);
-            return newObj;
-        },
-        QB_MAX_DUMP_DEPTH: 10,
+/*. // Object_dump(String_repeat)
+    if (Object_dump) {
+-.*/
         /**
          * Преобразует объект в строку. Обходятся только собственные атрибуты объекта.
          * @param obj  Преобразуемый объект любого типа.
@@ -212,6 +195,7 @@
          *                                    в качестве отступа для каждого нового уровня вложенности объекта.
          *                                    Если указано число, то отспупом будет указанное кол-во пробелов.
          */
+        QB_MAX_DUMP_DEPTH: 10,
         dump: function(obj, depth, indent, _shift) {
             indent = (indent > 0) ? ' '.repeat(indent) : indent || '';
             _shift = _shift || '';
@@ -247,6 +231,30 @@
                 }
             }
             return str;
+        },
+/*. } -.*/
+        /**
+         * Делает новый объект на основе указанного.
+         * @param {Object|Array} obj  Итерируемый объект, из которого нужно создать новый объект.
+         * @param {Function} fn  Обработчик объекта. Вызывается для каждого ключа исходного объекта.
+         *                       Контекст - создаваемый объект. Параметры - ключ исходного объекта, значение ключа, исходный объект.
+         *                       Если из функции возвращается стока (str), то в новый объект записывается ключ str со значением из
+         *                       исходного объекта.
+         *                       Если возвращаемое значение не строка и интерпретируется как true, то в новый объект записывается
+         *                       исходный ключ с исходным значением.
+         *                       Если возвращаемое значение не строка и интерпретируется как false, ключ в новый объект не попадает.
+         */
+        makeFrom: function(obj, fn) {
+            var newObj = {};
+            each(obj, function(val, key) {
+                var res = fn.call(newObj, key, val, this);
+                if (typeof res === 'string') {
+                    newObj[res] = val;
+                } else if (res) {
+                    newObj[key] = val;
+                }
+            }, true);
+            return newObj;
         }
     }, false, true);
     Object.is = Object.isObject;
@@ -331,7 +339,7 @@
 
         // Дополнительные методы
         last: function() {
-            return this[(this.length || 1) - 1];
+            return this[this.length - 1];
         },
         contains: function(item) {
             return this.indexOf(item) >= 0;
@@ -435,6 +443,9 @@
             ind = (ind < 0) ? Math.max(0, this.length + ind + 1) : ind;
             return this.substr(0, ind) + str + this.substr(ind);
         },
+/*. // String_repeat
+    if (String_repeat) {
+-.*/
         /**
          * Повторяет строку несколько раз.
          * @param {Number} times  Сколько раз повторить строку.
@@ -448,6 +459,7 @@
             }
             return res.join(separator);
         },
+/*. } -.*/
         format: function(replaceObj) {
             return this.replace(reFormatReplace, function(fullExpr, expr) {
                 if (expr) {
@@ -500,6 +512,9 @@
         }
     }, false, true);
 
+/*. // Date
+    if (Date) {
+-.*/
     /*----------   Расширение Date   ----------*/
     merge(Date, {
         now: function() {
@@ -510,6 +525,7 @@
         }
     }, false, true);
     Date.is = Date.isDate;
+/*. } -.*/
 
     /*----------   Расширение Number   ----------*/
     var Math = window.Math;
@@ -557,6 +573,9 @@
         }
     }
 
+/*. // Class
+    if (Class) {
+-.*/
     /*----------   Реализация Class   ----------*/
     function Empty() {}
 
@@ -614,7 +633,11 @@
 
         return constructor;
     }
+/*. } -.*/
 
+/*. // Events(Class)
+    if (Events) {
+-.*/
     /*----------   Реализация Events   ----------*/
     function getEventInfo(name) {
         var info = name.split('.', 2);
@@ -742,7 +765,11 @@
         remove: p.removeEvents,
         send: p.triggerEvent
     });
+/*. } -.*/
 
+/*. // Deferred(Class)
+    if (Deferred) {
+-.*/
     /*----------   Реализация Deferred   ----------*/
     var DEFERRED_STATUS = {
         UNRESOLVED: 0,
@@ -867,7 +894,11 @@
             return this.$status === statusVal;
         }
     }.bind(Deferred.prototype));
+/*. } -.*/
 
+/*. // ready(Deferred)
+    if (ready) {
+-.*/
     /*----------   Реализация deferred-а DOMReady (аналог $(document).ready) ----------*/
     var DOMReady = new Deferred(),
         windowLoad = new Deferred(),
@@ -905,6 +936,11 @@
             })();
         }
     }
+/*. } -.*/
+
+/*. // Loader(Object_dump,ns,Class,Events,Deferred,ready)
+    if (Loader) {
+-.*/
 
     /*   *** Загрузчик ресурсов ***
      *
@@ -1264,7 +1300,7 @@
             this.resources = resources;
             this.loader = loader;
             this.args = exports ? exports.args : null;
-            this.flags = exports ? exports.flags : {};
+            this.options = exports ? exports.flags : {};
             Deferred.when.apply(null, resources).then(
                 this._handleLoad.bind(this),
                 this._handleLoadError.bind(this)
@@ -1274,7 +1310,7 @@
             this.resources.forEachCall('load');
         },
         _handleLoad: function() {
-            var flags = this.flags,
+            var flags = this.options,
                 parseArgs = this._parseArgs.bind(this);
             if (flags.ready || flags.load) {
                 // Очередность важна - флаг load имеет приоритет
@@ -1512,37 +1548,54 @@
         'doc': 'document',
         'def': 'qb; document; window'
     });
+/*. } -.*/
 
     /*----------   Создание основного объекта   ----------*/
 
+/*. if (Loader) { -.*/
     function qb(handler) {
         Loader.ready.done(handler);
     }
+/*. } else { -.*/
+    var qb = {};
+/*. } -.*/
 
     merge(qb, {
         // Утилиты
-        ns: ns,
-        merge: merge,
-        each: each,
-        pass: pass,
-        when: Deferred.when,
-        signals: signals,
-        ready: DOMReady.done.bind(DOMReady),
-        load: windowLoad.done.bind(windowLoad),
-        // Загрузчик
-        Loader: Loader,
-        loader: loader,
-        require: loader.require.bind(loader),
-        // Классы
-        Class: Class,
-        Events: Events,
-        Deferred: Deferred,
-        Script: Script,
-        Shortcuts: Shortcuts,
+        merge: merge
+      , each: each
+      , pass: pass
+/*. if (ns) { -.*/
+      , ns: ns
+/*. } -.*/
+/*. if (Events) { -.*/
+      , signals: signals
+/*. } -.*/
+/*. if (ready) { -.*/
+      , ready: DOMReady.done.bind(DOMReady)
+      , load: windowLoad.done.bind(windowLoad)
+/*. } -.*/
+/*. if (Loader) { -.*/
+      , Loader: Loader
+      , loader: loader
+      , require: loader.require.bind(loader)
+/*. } -.*/
+/*. if (Class) { -.*/
+      , Class: Class
+/*. } -.*/
+/*. if (Events) { -.*/
+      , Events: Events
+/*. } -.*/
+/*. if (Deferred) { -.*/
+      , Deferred: Deferred
+      , when: Deferred.when
+/*. } -.*/
+/*. if (options.full) { -.*/
         // Объект Debug-параметров
-        debug: {},
+      , debug: {}
         // Объект конфигурационных параметров
-        config: {}
+      , config: {}
+/*. } -.*/
     });
 
     window.qb = qb;
