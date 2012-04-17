@@ -14,7 +14,7 @@ var fs = require('fs'),
 ejs.open = '/*.';
 ejs.close = '.*/';
 
-// Получаем список частей исходника
+// Получаем список частей исходника и их зависимости
 var parts = {},
     deps = {},
     src = fs.readFileSync(CORE_SRC_FILE, 'utf8'),
@@ -25,6 +25,33 @@ while(part = PART_REGEXP.exec(src)) {
     deps[part[1]] = part[2] ? part[2].split(',') : [];
 }
 
+var existingParts = Object.keys(parts);
+
+// Парсим аргументы
+var args = require('nomnom').options({
+    parts: {
+        position: 0,
+        list: true,
+        help: 'Parts, that will be built. Full build will be made by default.',
+        'default': existingParts,
+        callback: function(part) {
+            return (existingParts.indexOf(part) >= 0) || 'Error. There is no part named "' + part + '".';
+        }
+    },
+    compress: {
+        abbr: 'c',
+        help: 'Minimize output file using uglify.js',
+        flag: true
+    },
+    tiny: {
+        abbr: 't',
+        help: 'Build only common utilites of qb.js. If set, all parts are excluded.',
+        flag: true
+    }
+}).script('node build.js')
+    .help('Available parts: ' + existingParts.join(', '))
+    .parse();
+
 // Включает часть в сборку, рекурсивно добавляя ее зависимости
 function addPart(part) {
     parts[part] = true;
@@ -32,34 +59,8 @@ function addPart(part) {
         addPart(dep);
     });
 }
-
-// Обрабатываем аргументы командной строки
-var args = process.argv.slice(2),
-    partsPassed = false,
-    argParts = {},
-    options = {};
-args.forEach(function(arg) {
-    if (/^--/.test(arg)) {
-        // Выставляем флаги (--compress и т.д.)
-        options[arg.substr(2)] = true;
-    } else {
-        if (arg in parts) {
-            partsPassed = true;
-            // Включаем выбранные части и их зависимости
-            addPart(arg);
-        } else {
-            process.stderr.write(util.format('Error: There is no part named "%s"\n', arg));
-            process.exit(1);
-        }
-    }
-});
-
-// Если никаких частей не передано и нет флага "--tiny", то собираем все части
-if (!partsPassed && !options.tiny) {
-    options.full = true;
-    for (part in parts) {
-        parts[part] = true;
-    }
+if (!args.tiny) {
+    args.parts.forEach(addPart);
 }
 
 // Генерируем информацию о собранных частях
@@ -70,7 +71,7 @@ for (part in parts) {
 }
 
 // Накладываем шаблон
-parts.options = options;
+parts.options = args;
 var buildSrc = ejs.render(src, parts);
 
 // Создаем директорию для собранных файлов
@@ -87,7 +88,7 @@ var builtInfo = util.format('Build process successful.\n' +
                             partsIncluded.join(', ') || 'no (tiny version)',
                             partsOmmited.join(', ') || 'no (full build)',
                             builtScriptFile, buildSrc.length);
-if (options.compress) {
+if (args.compress) {
     var minifiedSrc = minjs(buildSrc),
         builtScriptMinFile = path.resolve(BUILT_DIR, path.basename(CORE_SRC_FILE, '.js') + '.min.js');
     fs.writeFileSync(builtScriptMinFile, minifiedSrc);
