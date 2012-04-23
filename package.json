@@ -9,7 +9,8 @@
     "dependencies": {
         "ejs": ">=0.7.1",
         "uglify-js": "*",
-        "nomnom": ">=1.5.1"
+        "nomnom": ">=1.5.1",
+        "wrench": "*"
     },
     "scripts": {
         "install": "node build.js --compress"

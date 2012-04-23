@@ -1,4 +1,6 @@
+/*. if (!options.nodejs) { -.*/
 (function(window, document, location, undefined) {
+/*. } -.*/
 
 /*. // ns
     if (ns) {
@@ -74,6 +76,7 @@
     var _toString = Object.prototype.toString,
         toString = _toString.thisToArg();
 
+/*. if (!options.nodejs) { -.*/
     // Метод для преобразования относительного урла в абсолютный
     // Проверка, работает ли преобразование урла в абсолютный через установку href у ссылки (не работает в IE<8)
     var LINK = document.createElement('a');
@@ -90,6 +93,7 @@
             return LINK.href;
         }
     }
+/*. } -.*/
 
     /*----------   Расширение Function   ----------*/
     merge(Function, {
@@ -487,6 +491,11 @@
                 return HTML_ESCAPE_MAP[ch];
             });
         },
+/*. if (!options.nodejs) { -.*/
+        toAbsoluteUrl: function() {
+            return toAbsoluteUrl(this);
+        },
+/*. } -.*/
         /**
          * Преобразует строку в примитивы
          * ('null' -> null; 'true' -> true и т.д.)
@@ -506,9 +515,6 @@
                 }
             }
             return result;
-        },
-        toAbsoluteUrl: function() {
-            return toAbsoluteUrl(this);
         }
     }, false, true);
 
@@ -528,7 +534,6 @@
 /*. } -.*/
 
     /*----------   Расширение Number   ----------*/
-    var Math = window.Math;
     merge(Number, {
         random: function(min, max) {
             return min + Math.random() * (max - min);
@@ -1598,6 +1603,12 @@
 /*. } -.*/
     });
 
+/*. if (options.nodejs) { -.*/
+    module.exports = qb;
+/*. } else { -.*/
     window.qb = qb;
+/*. } -.*/
 
-})(window, document, window.location);
+/*. if (!options.nodejs) { -.*/
+})(window, document, location);
+/*. } -.*/

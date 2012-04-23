@@ -1,25 +1,24 @@
-// Устанавливаем в качестве рабочей директории папку текущен скрипта
-process.chdir(__dirname);
-
 var fs = require('fs'),
     util = require('util'),
     path = require('path'),
     ejs = require('ejs'),
     minjs = require('uglify-js'),
-    PART_REGEXP = /\/\*\.\s\/\/\s(\w+)(?:\(([\w,_]+)\))?/ig,
-    CORE_SRC_FILE = './qb/core.js',
-    BUILT_DIR = './build';
+    wrench = require('wrench');
 
-// Меняем тэги для EJS-шаблона
-ejs.open = '/*.';
-ejs.close = '.*/';
+// Устанавливаем в качестве рабочей директории папку текущего скрипта
+process.chdir(__dirname);
+
+var PART_REGEXP = /\/\*\.\s\/\/\s(\w+)(?:\(([\w,_]+)\))?/ig,
+    SRC_DIR = path.resolve('./qb'),
+    BUILT_DIR = path.resolve('./build'),
+    CORE_SRC = 'core.js';
 
 // Получаем список частей исходника и их зависимости
 var parts = {},
     deps = {},
-    src = fs.readFileSync(CORE_SRC_FILE, 'utf8'),
+    coreSrc = fs.readFileSync(path.join(SRC_DIR, CORE_SRC), 'utf8'),
     part;
-while(part = PART_REGEXP.exec(src)) {
+while(part = PART_REGEXP.exec(coreSrc)) {
     parts[part[1]] = false;
     // Запоминаем зависимости этой части
     deps[part[1]] = part[2] ? part[2].split(',') : [];
@@ -28,29 +27,55 @@ while(part = PART_REGEXP.exec(src)) {
 var existingParts = Object.keys(parts);
 
 // Парсим аргументы
+var corePartsPassed = false;
 var args = require('nomnom').options({
-    parts: {
-        position: 0,
-        list: true,
-        help: 'Parts, that will be built. Full build will be made by default.',
-        'default': existingParts,
-        callback: function(part) {
-            return (existingParts.indexOf(part) >= 0) || 'Error. There is no part named "' + part + '".';
+    core: {
+        abbr: 'c',
+        help: 'Собрать только ядро core.js. Через запятую указывается список частей ядра, которые нужно включить в сборку, ' +
+              'либо одно из значений: "tiny" для сборки минимальной версии и "full" - для сборки полной версии ядра.',
+        'default': false,
+        callback: function(parts) {
+            // Проверяем, существуют ли указанные части
+            if (typeof parts === 'string') {
+                if (parts !== 'tiny' && parts !== 'full') {
+                    corePartsPassed = true;
+                    parts = parts.split(',');
+                    for (var i = 0, len = parts.length; i < len; i++) {
+                        var part = parts[i];
+                        if (existingParts.indexOf(part) === -1) {
+                            return 'Ошибка! В ядре нет части с именем "' + part + '".'
+                        }
+                    }
+                }
+            }
         }
     },
-    compress: {
-        abbr: 'c',
-        help: 'Minimize output file using uglify.js',
+    minify: {
+        abbr: 'm',
+        help: 'Минифицировать ли собранные файлы с помощью "uglify-js".',
         flag: true
     },
-    tiny: {
-        abbr: 't',
-        help: 'Build only common utilites of qb.js. If set, all parts are excluded.',
+    nodejs: {
+        abbr: 'n',
+        help: 'Соберется Node.JS модуль. В него будут включены части "Deferred" и "Class", но это можно переопределить с ' +
+              'помощью флага "--core=<part1,part2...partN>".',
         flag: true
     }
 }).script('node build.js')
-    .help('Available parts: ' + existingParts.join(', '))
+    .help('Список частей ядра: ' + existingParts.join(', '))
     .parse();
+
+args.tiny = (args.core === 'tiny');
+
+if (args.tiny) {
+    args.parts = [];
+} else if (corePartsPassed) {
+    args.parts = args.core.split(',');
+} else if (args.nodejs) {
+    args.parts = ['Class', 'Deferred'];
+} else {
+    args.parts = existingParts;
+}
 
 // Включает часть в сборку, рекурсивно добавляя ее зависимости
 function addPart(part) {
@@ -59,9 +84,7 @@ function addPart(part) {
         addPart(dep);
     });
 }
-if (!args.tiny) {
-    args.parts.forEach(addPart);
-}
+args.parts.forEach(addPart);
 
 // Генерируем информацию о собранных частях
 var partsIncluded = [],
@@ -70,33 +93,69 @@ for (part in parts) {
     (parts[part] ? partsIncluded : partsOmmited).push(part);
 }
 
-// Накладываем шаблон
+// Меняем тэги для EJS-шаблона
+ejs.open = '/*.';
+ejs.close = '.*/';
 parts.options = args;
-var buildSrc = ejs.render(src, parts);
+// Накладываем шаблон
+var coreOut = ejs.render(coreSrc, parts);
 
-// Создаем директорию для собранных файлов
-if (!path.existsSync(BUILT_DIR)) {
-    fs.mkdirSync(BUILT_DIR);
+// Создаем директорию для собранных файлов либо чистим ее
+if (path.existsSync(BUILT_DIR)) {
+    wrench.rmdirSyncRecursive(BUILT_DIR);
 }
-// Пишем файл
-var builtScriptFile = path.resolve(BUILT_DIR, path.basename(CORE_SRC_FILE));
-fs.writeFileSync(builtScriptFile, buildSrc);
-var builtInfo = util.format('Build process successful.\n' +
-                            'Parts included: %s\n' +
-                            'Parts ommited: %s\n' +
-                            'File: "%s" (%d bytes)\n',
-                            partsIncluded.join(', ') || 'no (tiny version)',
-                            partsOmmited.join(', ') || 'no (full build)',
-                            builtScriptFile, buildSrc.length);
-if (args.compress) {
-    var minifiedSrc = minjs(buildSrc),
-        builtScriptMinFile = path.resolve(BUILT_DIR, path.basename(CORE_SRC_FILE, '.js') + '.min.js');
-    fs.writeFileSync(builtScriptMinFile, minifiedSrc);
-    var savedRatio = Math.floor((buildSrc.length - minifiedSrc.length) / buildSrc.length * 100);
-    builtInfo += util.format('Minification successful.\n' +
-                             'File: "%s" (%d bytes).\n' +
-                             'Saved %d% of the original size.\n',
-                             builtScriptMinFile, minifiedSrc.length, savedRatio);
+fs.mkdirSync(BUILT_DIR);
+
+function log(filepath, src, minified) {
+    var info = 'Файл "' + filepath + '" собран.';
+    if (minified) {
+        var savedRatio = Math.floor((src.length - minified.length) / src.length * 100);
+        info += util.format(' Сжатие - %d% (%d к %d байт)',
+                            savedRatio, minified.length, src.length);
+    }
+    process.stdout.write(info + '\n');
 }
 
-process.stdout.write('\n' + builtInfo + '\n');
+// Пишем ядро
+if (args.minify) {
+    var coreOutMin = minjs(coreOut);
+}
+fs.writeFileSync(path.join(BUILT_DIR, CORE_SRC), coreOutMin || coreOut);
+log(CORE_SRC, coreOut, coreOutMin);
+process.stdout.write(util.format('Части, вошедшие в ядро: %s\n' +
+                                 'Не вошли в ядро: %s\n',
+                                 partsIncluded.join(', ') || 'собралась минимальная версия',
+                                 partsOmmited.join(', ') || 'собралась полная версия'));
+
+function writeFile(filePath, outFilePath, minify) {
+    fs.readFile(filePath, 'utf8', function(err, data) {
+        if (minify) {
+            var compressed = minjs(data);
+        }
+        fs.writeFile(outFilePath, compressed || data, 'utf8');
+        log(filePath, data, compressed);
+    });
+}
+
+if (!args.core) {
+    process.chdir('qb');
+    wrench.readdirRecursive('.', function(err, files) {
+        if (files) {
+            files.forEach(function(file) {
+                fs.stat(file, function(err, info) {
+                    if (info.isFile()) {
+                        var filename = path.basename(file);
+                        if (filename !== CORE_SRC) {
+                            var dir = path.join(BUILT_DIR, path.dirname(file));
+                            if (!path.existsSync(dir)) {
+                                fs.mkdirSync(dir);
+                            }
+                            var outfile = path.join(dir, filename);
+                            writeFile(file, outfile, args.minify);
+                        }
+                    }
+                });
+            });
+        }
+    });
+}
