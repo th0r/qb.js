@@ -50,6 +50,12 @@ var args = require('nomnom').options({
             }
         }
     },
+    except: {
+        abbr: 'e',
+        help: 'Исключает перечисленные модули из сборки. Должно быть регулярным выражением, которое будет матчится на ' +
+              'относительный путь к модулям.',
+        'default': false
+    },
     minify: {
         abbr: 'm',
         help: 'Минифицировать ли собранные файлы с помощью "uglify-js".',
@@ -72,7 +78,7 @@ if (args.tiny) {
 } else if (corePartsPassed) {
     args.parts = args.core.split(',');
 } else if (args.nodejs) {
-    args.parts = ['Class', 'Deferred'];
+    args.parts = ['ns', 'Class', 'Deferred'];
 } else {
     args.parts = existingParts;
 }
@@ -138,6 +144,7 @@ function writeFile(filePath, outFilePath, minify) {
 }
 
 if (!args.core) {
+    var except = args.except ? new RegExp(args.except, 'i') : null;
     process.chdir('qb');
     wrench.readdirRecursive('.', function(err, files) {
         if (files) {
@@ -145,14 +152,15 @@ if (!args.core) {
                 fs.stat(file, function(err, info) {
                     if (info.isFile()) {
                         var filename = path.basename(file);
-                        if (filename !== CORE_SRC) {
-                            var dir = path.join(BUILT_DIR, path.dirname(file));
-                            if (!path.existsSync(dir)) {
-                                fs.mkdirSync(dir);
-                            }
-                            var outfile = path.join(dir, filename);
-                            writeFile(file, outfile, args.minify);
+                        if (filename === CORE_SRC || (except && except.test(file))) {
+                            return false;
                         }
+                        var dir = path.join(BUILT_DIR, path.dirname(file));
+                        if (!path.existsSync(dir)) {
+                            fs.mkdirSync(dir);
+                        }
+                        var outfile = path.join(dir, filename);
+                        writeFile(file, outfile, args.minify);
                     }
                 });
             });

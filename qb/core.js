@@ -2,18 +2,27 @@
 (function(window, document, location, undefined) {
 /*. } -.*/
 
+    var NODEJS = (typeof module !== 'undefined' && module.require),
+        qb = {};
+
 /*. // ns
     if (ns) {
 -.*/
+    if (NODEJS) {
+        var DEFAULT_PARENT = module.parent ? module.parent.exports : module.exports;
+    } else {
+        DEFAULT_PARENT = window;
+    }
+
     /**
      * Namespace - функция для создания областей видимости
      * @param {String} path  Строка вида "ns.ns1.ns2"
-     * @param {Object} [parent=window]  Опционально. Объект, в котором будут создаваться области видимости.
-     * @param {Object} [finalObj={}]  Опционально. Объект, который будет записан на место последней области видимости.
+     * @param {Object} [parent=<module.parent.exports> or <module.exports> or <window>]  Объект, в котором будут создаваться области видимости.
+     * @param {Object} [finalObj={}]  Объект, который будет записан на место последней области видимости.
      */
     function ns(path, parent, finalObj) {
         var parts = path.split('.'),
-            ns = parent || window;
+            ns = parent || DEFAULT_PARENT;
         for (var i = 0, len = parts.length - 1; i < len; i++) {
             var part = parts[i];
             if (part) {
@@ -48,9 +57,9 @@
      * Копирует атрибуты из одного объекта в другой
      * @param {Object} to  Объект, в который нужно скопировать свойства
      * @param {Object} from  Объект, из которого нужно скопировать свойства
-     * @param {Boolean} [onlyOwn=false]  Опционально. Если true, то будет копироваться только личные атрибуты
+     * @param {Boolean} [onlyOwn=false]  Если true, то будет копироваться только личные атрибуты
      *                                   объекта from (from.hasOwnProperty() === true)
-     * @param {Boolean} [keepExisting=false]  Опционально. Если true, то атрибут из from будет копироваться в to
+     * @param {Boolean} [keepExisting=false]  Если true, то атрибут из from будет копироваться в to
      *                                        только если его там еще нет.
      */
     function merge(to, from, onlyOwn, keepExisting) {
@@ -357,7 +366,7 @@
          * Удаляет один указанный элемент из массива (по строгому соответствию).
          * Модифицируется исходный массив.
          * @param item  Удаляемый элемент.
-         * @param {Boolean} [fromEnd=false]  Опционально. Искать элемент с конца.
+         * @param {Boolean} [fromEnd=false]  Искать элемент с конца.
          * @returns {Array}  Модифицированный исходный массив.
          */
         remove: function(item, fromEnd) {
@@ -401,7 +410,7 @@
         },
         /**
          * Преобразует массив ключей в объект (['a', 'b'] => {a: true, b: true})
-         * @param [value=true]  Опционально. Значение, которое будет записано в объект для каждого ключа.
+         * @param [value=true]  Значение, которое будет записано в объект для каждого ключа.
          * @returns {Object}
          */
         toObject: function(value) {
@@ -558,7 +567,7 @@
      * Выполняет функцию для всех атрибутов объекта
      * @param {Object} obj  Итерируемый объект.
      * @param {Function} fn  Выполняемая функция. Если из нее возвратить false, то итерация прекращется.
-     * @param {Boolean} [onlyOwn=false]  Опционально. Выполнять функцию только для "личных" атрибутов объекта.
+     * @param {Boolean} [onlyOwn=false]  Выполнять функцию только для "личных" атрибутов объекта.
      */
     function each(obj, fn, onlyOwn) {
         if (Object.isIteratable(obj)) {
@@ -673,7 +682,7 @@
          *   - addEvents(eventsObj, [triggerOnce]), где eventsObj = {<name>: <handler>, ...}
          * @param {String} name  Имя события.
          * @param {Function} handler  Обработчик (слушатель) события.
-         * @param {Boolean} [triggerOnce=false]  Опционально. Вызвать данный обработчик только один раз (затем удалить).
+         * @param {Boolean} [triggerOnce=false]  Вызвать данный обработчик только один раз (затем удалить).
          */
         addEvents: function(name, handler, triggerOnce) {
             if (typeof name === 'string') {
@@ -704,7 +713,7 @@
          *   - removeEvents('click.some-namespace') --> удаляет все обработчики события 'click' из NS 'some-namespace'
          *   - removeEvents('.some-namespace') --> удаляет все обработчики из NS 'some-namespace'
          * @param {String} name  Имя или паттерн (см. описание), указывающий на обработчики, которые нужно удалить.
-         * @param {Function} [handler]  Опционально. Обработчик, который нужно удалить.
+         * @param {Function} [handler]  Обработчик, который нужно удалить.
          */
         removeEvents: function(name, handler) {
             var info = getEventInfo(name),
@@ -741,8 +750,8 @@
          * Триггерит указанное событие.
          * Здесь использовать NS нельзя, т.е. вызываются обработчики из всех областей видимости.
          * @param {String} name  Имя вызываемого события (например, 'click').
-         * @param {Array} [args=[]]  Опционально. Аргументы, с которыми будет вызван каждый обработчик.
-         * @apram [thisObj=self]  Опционально. Объект, который станет this в обработчиках.
+         * @param {Array} [args=[]]  Аргументы, с которыми будет вызван каждый обработчик.
+         * @apram [thisObj=self]  Объект, который станет this в обработчиках.
          */
         triggerEvent: function(name, args, thisObj) {
             args = args || [];
@@ -1555,14 +1564,11 @@
     });
 /*. } -.*/
 
-    /*----------   Создание основного объекта   ----------*/
-
+    /*----------   Замена основного объекта   ----------*/
 /*. if (Loader) { -.*/
-    function qb(handler) {
+    qb = function(handler) {
         Loader.ready.done(handler);
-    }
-/*. } else { -.*/
-    var qb = {};
+    };
 /*. } -.*/
 
     merge(qb, {
@@ -1582,6 +1588,7 @@
 /*. } -.*/
 /*. if (Loader) { -.*/
       , Loader: Loader
+      , Shortcuts: Shortcuts
       , loader: loader
       , require: loader.require.bind(loader)
 /*. } -.*/
@@ -1603,11 +1610,11 @@
 /*. } -.*/
     });
 
-/*. if (options.nodejs) { -.*/
-    module.exports = qb;
-/*. } else { -.*/
-    window.qb = qb;
-/*. } -.*/
+    if (NODEJS) {
+        module.exports = qb;
+    } else {
+        window.qb = qb;
+    }
 
 /*. if (!options.nodejs) { -.*/
 })(window, document, location);
