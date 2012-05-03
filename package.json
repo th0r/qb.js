@@ -12,8 +12,11 @@
         "nomnom": ">=1.5.1",
         "wrench": "*"
     },
+    "devDependencies": {
+        "connect": ">=2.2.1"
+    },
     "scripts": {
-        "install": "node build.js --compress"
+        "install": "node build.js -m"
     },
     "private": true
 }
