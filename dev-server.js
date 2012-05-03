@@ -5,7 +5,11 @@ var http = require('http'),
     parseUrl = require('url').parse,
     parseQuery = require('querystring').parse;
 
-var app = connect();
+// Создаем сервер с логгером
+var app = connect().use(connect.logger({
+    format: 'dev',
+    immediate: true
+}));
 
 // Объявляем директории со статикой
 'qb libs tests examples static'.split(' ').forEach(function(folder) {
@@ -20,13 +24,20 @@ app.use(connect.query())
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(json));
     })
-    // По-умолчанию - запуск тестов
+    // Редиректим на корень, откуда запускаем тесты
     .use(function(req, res) {
-        util.pump(fs.createReadStream('tests/tests.html'), res);
+        if (parseUrl(req.url).pathname === '/') {
+            util.pump(fs.createReadStream('tests/tests.html'), res);
+        } else {
+            res.writeHead(302, {
+                'Location': '/'
+            });
+            res.end();
+        }
     });
 
 var args = process.argv.slice(2),
     port = args[0] || 8080;
 app.listen(port, '127.0.0.1', function() {
-    process.stdout.write('Development HTTP server started on localhost:' + port + '...');
+    process.stdout.write('Development HTTP server started on localhost:' + port + '...\n');
 });
