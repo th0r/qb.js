@@ -160,6 +160,16 @@
                 fn.apply((this === lazy ? null : this), arguments);
             };
             return lazy;
+        },
+        timeout: function(timeout) {
+            var fn = this;
+            return function() {
+                var _this = this,
+                    args = arguments;
+                setTimeout(function() {
+                    fn.apply(_this, args);
+                }, timeout);
+            }
         }
     }, false, true);
 

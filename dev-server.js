@@ -38,6 +38,6 @@ app.use(connect.query())
 
 var args = process.argv.slice(2),
     port = args[0] || 8080;
-app.listen(port, '127.0.0.1', function() {
+app.listen(port, '0.0.0.0', function() {
     process.stdout.write('Development HTTP server started on localhost:' + port + '...\n');
 });
