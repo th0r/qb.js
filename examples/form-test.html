@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Form test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="text/javascript" src="../qb/core.js"></script>
+</head>
+<body>
+    <form id="form" action="/tests" data-qb-validate>
+        <label for="1">Checkbox 1
+            <input type="radio" name="TestName" id="1" value="1" data-qb-validate='min: 1'>
+        </label>
+        <label for="1">Checkbox 1
+            <input type="radio" name="TestName" id="2" value="2">
+        </label>
+    </form>
+
+    <script type="text/javascript">
+
+        qb.loader.queryShortcuts.add({
+            'jQuery': 'libs/jquery'
+        });
+
+        qb.require('qb/dom/FormValidator', '{ready}', function() {
+            /*var validator = new qb.dom.FormValidator('#form', {
+                'TestName': {}
+            });
+
+            validator.validate();*/
+
+            qb.dom.FormValidator.activate();
+
+            $('#form').data('qb-validator').validate();
+        });
+
+    </script>
+</body>
+</html>
