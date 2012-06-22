@@ -21,10 +21,18 @@ qb.require('jQuery', 'jQuery; def', function($, qb, document, window) {
         validate: function() {
             var self = this,
                 val = this.value(),
-                errors = {};
+                errors = {},
+                rules = this.rules;
+            if (rules && rules.debug) {
+                delete rules.debug;
+                debugger;
+            }
             qb.each(this.rules, function(arg, rule) {
-                var validator = self.validators[rule],
-                    error = validator.check(val, arg, self);
+                var validator = self.validators[rule];
+                if (!validator) {
+                    throw 'There is no validator with name "' + rule + '"';
+                }
+                var error = validator.check(val, arg, self);
                 if (error) {
                     errors[rule] = error.format({
                         val: val,
@@ -188,13 +196,37 @@ qb.require('jQuery', 'jQuery; def', function($, qb, document, window) {
                 items: 'Минимальное кол-во выделенных опций: {arg}.'
             },
             check: function(val, arg, field) {
-                if (field.type === 'radio') {
+                var type = field.type;
+                if (type === 'radio') {
                     if (val === null) {
                         var error = this.errors.radio;
                     }
-                } else if (val.length < arg) {
-                    error = this.errors[(field.type === 'checkbox' || field.type === 'select') ?
-                                        'items' : 'text'];
+                } else {
+                    var itemsType = (type === 'checkbox' || type === 'select');
+                    if (itemsType) {
+                        val = Array.from(val);
+                    }
+                    if (!val || val.length < arg) {
+                        error = this.errors[itemsType ? 'items' : 'text'];
+                    }
+                }
+                return error;
+            }
+        },
+        max: {
+            errors: {
+                text: 'Максимальное кол-во символов в этом поле: {arg}.',
+                items: 'Максимальное кол-во выделенных опций: {arg}.'
+            },
+            check: function(val, arg, field) {
+                var type = field.type,
+                    itemsType = (type === 'checkbox' || type === 'select');
+                if (itemsType) {
+                    val = Array.from(val);
+                }
+                if (type !== 'radio' && val && val.length > arg) {
+                    var error = this.errors[(field.type === 'checkbox' || field.type === 'select') ?
+                                            'items' : 'text'];
                 }
                 return error;
             }

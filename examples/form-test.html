@@ -7,12 +7,45 @@
 </head>
 <body>
     <form id="form" action="/tests" data-qb-validate>
-        <label for="1">Checkbox 1
-            <input type="radio" name="TestName" id="1" value="1" data-qb-validate='min: 1'>
-        </label>
-        <label for="1">Checkbox 1
-            <input type="radio" name="TestName" id="2" value="2">
-        </label>
+        <div>
+            <label for="login">Логин (email):
+                <input id="login" name="login" type="text" data-qb-validate="email">
+            </label>
+        </div>
+        <div>
+            <label for="name">Имя:
+                <input id="name" name="name" type="text" data-qb-validate="min: 1, max: 20">
+            </label>
+        </div>
+        <div>
+            <label for="phone">Телефон:
+                <input id="phone" name="phone" type="text" data-qb-validate="phone">
+            </label>
+        </div>
+        <div>
+            <div>Пол:</div>
+            <label for="man">Мужчина
+                <input type="radio" name="sex" id="man" value="m" data-qb-validate='min: 1'>
+            </label>
+            <label for="woman">Женщина
+                <input type="radio" name="sex" id="woman" value="w">
+            </label>
+        </div>
+        <div>
+            <div>Увлечения:</div>
+            <label for="it">
+                <input type="checkbox" name="hobby" id="it" value="it" data-qb-validate="min: 1, max: 2">Компы
+            </label>
+            <label for="cars">
+                <input type="checkbox" name="hobby" id="cars" value="cars">Машины
+            </label>
+            <label for="women">
+                <input type="checkbox" name="hobby" id="women" value="women">Телочки
+            </label>
+        </div>
+        <div>
+            <input type="submit" value="Отправить">
+        </div>
     </form>
 
     <script type="text/javascript">
@@ -30,7 +63,12 @@
 
             qb.dom.FormValidator.activate();
 
-            $('#form').data('qb-validator').validate();
+            var $form = $('#form')
+                .on('submit', function() {
+                    console.log($(this).serialize());
+                    console.dir($form.data('qb-validator').validate());
+                    return false;
+                });
         });
 
     </script>
