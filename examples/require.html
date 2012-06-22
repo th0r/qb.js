@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mustache Test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <script type="text/javascript" src="../qb/core.js"></script>
+</head>
+<body>
+
+    <script id="people-tmpl" type="text/mustache">
+        <div>
+            {{#people}}
+                {{#bold}}{{name}}{{/bold}}
+            {{/people}}
+        </div>
+    </script>
+
+    <script type="text/javascript">
+        qb.loader.queryShortcuts.add({
+            'Mustache': 'https://raw.github.com/janl/mustache.js/master/mustache.js',
+            'EJS': 'http://embeddedjavascript.googlecode.com/files/ejs_production.js',
+            'Tmpls': '  Mustache;   EJS;  qb : debug, cookie,   storage   '
+        });
+
+        qb.require('   Tmpls ;  Mustache; EJS;   libs/$;  qb : debug, cookie,   storage   ', '  qb:  ns,  log, time,timeEnd ; $ | {ready, reload}', function() {
+            console.timeStamp('loaded');
+
+            var tmpl = Mustache.compile($('#people-tmpl').text());
+
+            qb.time('render');
+            var output = tmpl({
+                people: [
+                    { first: 'Bruce', last: 'Willis' }
+                ],
+                name: function() {
+                    return this.first + ' ' + this.last
+                },
+                bold: function() {
+                    return function(text, render) {
+                        return '<b>' + render(text) + '</b>';
+                    }
+                }
+            });
+            qb.timeEnd('render');
+
+            qb.require('Mustache; libs/$; qb/debug', '{load}', function() {
+                console.timeStamp('reloaded');
+                $(output).appendTo('body');
+            });
+
+        });
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+    "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+    <title>Ready Test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="text/javascript" src="../qb/core.js"></script>
+</head>
+<body>
+    <script type="text/javascript">
+
+        qb.load(function() {
+            qb(function() {
+                qb.timeStamp('window loaded');
+            });
+        });
+
+        qb.ready(function() {
+            qb(function() {
+                qb.timeStamp('document ready');
+            });
+        });
+
+        qb.require('qb/debug; libs/jquery');
+
+        qb(function() {
+            qb.config.debug.depth = 1;
+            qb.log(qb.Loader.resources);
+
+            qb.require('qb/cookie; http://code.jquery.com/jquery-1.7.2.min.js').done(function() {
+                qb.log(qb.Loader.resources);
+            });
+        });
+
+        /*qb.Loader.ready.done(function() {
+            console.debug('scripts ready');
+            console.debug(qb.Loader.resources);
+        });
+
+        qb.loader.queryShortcuts.add({'jquery': 'libs/jquery'});
+        qb.require('qb/dom/View', function() {
+            console.debug('qb/dom/View loaded');
+        });
+        qb.require('qb/dom/View; !qb: cookie, storage; /libs/qunit/qunit.css', qb.pass);
+        qb.ready(function() {
+            console.debug('domready');
+        });*/
+
+    </script>
+</body>
+</html>
