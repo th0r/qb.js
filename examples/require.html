@@ -23,7 +23,7 @@
             'Tmpls': '  Mustache;   EJS;  qb : debug, cookie,   storage   '
         });
 
-        qb.require('   Tmpls ;  Mustache; EJS;   libs/$;  qb : debug, cookie,   storage   ', '  qb:  ns,  log, time,timeEnd ; $ | {ready, reload}', function() {
+        qb.require('   Tmpls ;  Mustache; EJS;   $;  qb : debug, cookie,   storage   ', '  qb:  ns,  log, time,timeEnd ; $ | {ready, reload}', function() {
             console.timeStamp('loaded');
 
             var tmpl = Mustache.compile($('#people-tmpl').text());
@@ -44,7 +44,7 @@
             });
             qb.timeEnd('render');
 
-            qb.require('Mustache; libs/$; qb/debug', '{load}', function() {
+            qb.require('Mustache; $; qb/debug', '{load}', function() {
                 console.timeStamp('reloaded');
                 $(output).appendTo('body');
             });

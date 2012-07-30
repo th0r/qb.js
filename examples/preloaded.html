@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Modules preloading test</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <script type="text/javascript" src="../qb/core.js"></script>
+    <script src="../qb/cookie.js"></script>
+    <script src="/libs/jquery.js"></script>
+    <script src="/qb/dom/FormValidator.js"></script>
+    <script src="../qb/storage.js"></script>
+</head>
+<body>
+
+    <script type="text/javascript">
+
+        qb.require('$; qb: dom/FormValidator, storage', function() {
+
+            console.log($, qb.cookie, qb.storage, qb.dom.FormValidator);
+            
+        });
+
+    </script>
+
+</body>
+</html>

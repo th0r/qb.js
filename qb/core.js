@@ -1163,7 +1163,9 @@
     var LoadingElement = new Class({
         Name: 'LoadingElement',
         Extends: Deferred,
-        Static: LOAD_STATUS,
+        Static: {
+            STATUS: LOAD_STATUS
+        },
 
         init: function(url) {
             Deferred.call(this);
@@ -1200,7 +1202,18 @@
     var Stylesheet = new Class({
         Name: 'Stylesheet',
         Extends: LoadingElement,
-        Static: LOAD_STATUS,
+        Static: {
+            STATUS: LOAD_STATUS,
+            getResourcesFromPage: function () {
+                var resources = {};
+                Array.slice(document.getElementsByTagName('link')).forEach(function (link) {
+                    if (link.rel === 'stylesheet' && link.href) {
+                        resources[toAbsoluteUrl(link.href)] = link;
+                    }
+                });
+                return resources;
+            }
+        },
 
         init: function(url) {
             LoadingElement.call(this, url);
@@ -1234,11 +1247,22 @@
             return 'Stylesheet [{}]'.format(this.url);
         }
     });
-
+    
     var Script = new Class({
         Name: 'Script',
         Extends: LoadingElement,
-        Static: LOAD_STATUS,
+        Static: {
+            STATUS: LOAD_STATUS,
+            getResourcesFromPage: function () {
+                var resources = {};
+                Array.slice(document.getElementsByTagName('script')).forEach(function (script) {
+                    if (script.src) {
+                        resources[toAbsoluteUrl(script.src)] = script;
+                    }
+                });
+                return resources;
+            }
+        },
 
         init: function(url) {
             LoadingElement.call(this, url);
@@ -1364,15 +1388,37 @@
     });
 
     var PARTS_PRIORITY = /^!|^\{(\d+)}/i,
-        EXPORTS_FLAGS = /(?:^|\|)\{([\w,]+)\}$/i;
+        EXPORTS_FLAGS = /(?:^|\|)\{([\w,]+)\}$/i,
+        FULL_URL = /^(https?:\/\/|\/)/i;
 
     var Loader = new Class({
         Name: 'Loader',
         Static: {
-            FULL_URL: /^(https?:\/\/|\/)/i,
             resources: {},
+            resourceTypes: [],
             requires: 0,
-            ready: new Deferred()
+            ready: new Deferred(),
+            getResources: function (updateFromPage) {
+                var resources = this.resources;
+                if (updateFromPage) {
+                    // Получаем список новых ресурсов со страницы
+                    this.resourceTypes.forEach(function (Class) {
+                        if (Class.getResourcesFromPage) {
+                            each(Class.getResourcesFromPage(), function (elem, url) {
+                                if (!resources[url]) {
+                                    var resource = resources[url] = new Class(url);
+                                    resource.elem = elem;
+                                    resource.resolve();
+                                }
+                            });
+                        }
+                    });
+                }
+                return resources;
+            },
+            registerResourceTypes: function (Classes) {
+                this.resourceTypes.append(Classes);
+            }
         },
 
         init: function(rootUrl) {
@@ -1401,7 +1447,7 @@
          */
         require: function(query, exports, callback, module) {
             var self = this,
-                resources = Loader.resources,
+                resources = Loader.getResources(true),
                 ready = Loader.ready,
                 argsLen = arguments.length;
             if (argsLen === 2) {
@@ -1442,7 +1488,7 @@
             return handlers.last();
         },
         _getLoadHandler: function(urls, exports) {
-            var resources = Loader.resources,
+            var resources = Loader.getResources(),
                 isReload = exports ? exports.flags.reload : false,
                 required = urls.map(function(url) {
                     var resource = resources[url],
@@ -1527,12 +1573,12 @@
                 info.part = 'http://' + part;
                 var isUrl = true;
             }
-            info.isUrl = isUrl = isUrl || Loader.FULL_URL.test(part);
+            info.isUrl = isUrl = isUrl || FULL_URL.test(part);
             info.part = isUrl ? toAbsoluteUrl(part) : part;
             return info;
         },
         _normalizeScriptUrl: function(url) {
-            return this.rootUrl + url.toLowerCase() + '.js';
+            return this.rootUrl + url + '.js';
         },
         _isStylesheet: function(url) {
             return /\.css$/i.test(url);
@@ -1548,6 +1594,9 @@
             return result.clean();
         }
     });
+    
+    // Регистрируем типы ресурсов
+    Loader.registerResourceTypes([Script, Stylesheet]);
 
     // Определяем директорию со скриптами
     var scripts = document.getElementsByTagName('script'),
@@ -1563,7 +1612,8 @@
 
     var loader = new Loader(rootJS);
     loader.queryShortcuts.add({
-        '$': 'jquery',
+        'jQuery': 'libs/jquery',
+        '$': 'jQuery',
         'CLS': 'qb/classes',
         'CSS': '/static/css'
     });
