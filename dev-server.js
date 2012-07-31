@@ -9,7 +9,7 @@ var http = require('http'),
 
 function build() {
     console.log('\n*** Сборка библиотеки: ***\n');
-    return cp.spawn(__dirname + '/build.js', [], {
+    return cp.spawn(__dirname + '/build.js', ['./qb'], {
         stdio: 'inherit'
     });
 }

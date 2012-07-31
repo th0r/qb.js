@@ -1,4 +1,5 @@
 .idea/workspace.xml
 /node_modules
 /qb
+/build
 /npm-*.log

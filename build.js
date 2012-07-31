@@ -11,8 +11,8 @@ process.chdir(__dirname);
 
 var INCLUDE_REGEXP = /^([ \t]*)(include\(.+?\);?)\s*?\n?/igm,
     SRC_DIR = path.resolve('src'),
-    BUILT_DIR = path.resolve('qb'),
-    CORE_SRC = 'core.js';
+    CORE_SRC = 'core.js',
+    BUILT_DIR;
 
 // Получаем список частей исходника и их зависимости
 var parts = {},
@@ -66,11 +66,17 @@ var args = require('nomnom').options({
         abbr: 'm',
         help: 'Минифицировать ли собранные файлы с помощью "uglify-js".',
         flag: true
+    },
+    dir: {
+        position: 0,
+        help: 'Директория, в которую будет собираться библиотека. По-умолчанию: "./build"',
+        'default': './build'
     }
 }).script('node build.js')
     .help('Список частей ядра: ' + existingParts.join(', '))
     .parse();
 
+BUILT_DIR = path.resolve(args.dir);
 args.tiny = (args.core === 'tiny');
 
 if (args.tiny) {
@@ -116,6 +122,7 @@ var coreOut = coreSrc.replace(INCLUDE_REGEXP, function (str, whitespaces, includ
 });
 
 // Создаем директорию для собранных файлов либо чистим ее
+console.log('Собираемся в папку "' + BUILT_DIR + '"...');
 if (fs.existsSync(BUILT_DIR)) {
     wrench.rmdirSyncRecursive(BUILT_DIR);
 }

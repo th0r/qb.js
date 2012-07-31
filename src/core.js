@@ -1,7 +1,6 @@
 (function(window, document, location, config, undefined) {
 
     var qb = {};
-    config = config || {};
     
     include('ns');
 
