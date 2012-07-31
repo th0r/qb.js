@@ -2,8 +2,8 @@
 <project version="4">
   <component name="Encoding" useUTFGuessing="true" native2AsciiForPropertiesFiles="false" defaultCharsetForPropertiesFiles="UTF-8">
     <file url="file://$PROJECT_DIR$" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/qb/classes/Collection.js" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/qb/dom/View.js" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/classes/Collection.js" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/dom/View.js" charset="UTF-8" />
   </component>
 </project>
 

@@ -3,7 +3,16 @@ var http = require('http'),
     connect = require('connect'),
     util = require('util'),
     parseUrl = require('url').parse,
-    parseQuery = require('querystring').parse;
+    parseQuery = require('querystring').parse,
+    cp = require('child_process'),
+    watch = require('watch');
+
+function build() {
+    console.log('\n*** Сборка библиотеки: ***\n');
+    return cp.spawn(__dirname + '/build.js', [], {
+        stdio: 'inherit'
+    });
+}
 
 // Создаем сервер с логгером
 var app = connect().use(connect.logger({
@@ -36,8 +45,25 @@ app.use(connect.query())
         }
     });
 
-var args = process.argv.slice(2),
-    port = args[0] || 8080;
-app.listen(port, '0.0.0.0', function() {
-    process.stdout.write('Development HTTP server started on localhost:' + port + '...\n');
+// Собираем библиотеку и запускаем сервер
+build().on('exit', function (code) {
+    if (code === 0) {
+        // Запускаем сервер
+        var args = process.argv.slice(2),
+            port = args[0] || 8080;
+        app.listen(port, '0.0.0.0', function () {
+            process.stdout.write('\n*** Сервер запущен на localhost:' + port + '... ***\n');
+        });
+        
+        // Мониторим изменения исходников и пересобираем библиотеку
+        watch.createMonitor(__dirname + '/src', {
+            interval: 1000
+        }, function (monitor) {
+            ['created', 'removed', 'changed'].forEach(function (event) {
+                monitor.on(event, build);
+            });
+        });
+    } else {
+        console.error('\nБиблиотека не собралась!\n');
+    }
 });

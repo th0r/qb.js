@@ -7,16 +7,16 @@
         "url": "https://th0r@github.com/th0r/qb.js.git"
     },
     "dependencies": {
-        "ejs": ">=0.7.1",
         "uglify-js": "*",
         "nomnom": ">=1.5.1",
         "wrench": "*"
     },
     "devDependencies": {
-        "connect": ">=2.2.1"
+        "connect": ">=2.2.1",
+        "watch": ">=0.5.1"
     },
     "scripts": {
-        "install": "node build.js -m"
+        "install": "node build.js"
     },
     "private": true
 }

@@ -1,28 +1,17 @@
-/*. if (!options.nodejs) { -.*/
-(function(window, document, location, undefined) {
-/*. } -.*/
+(function(window, document, location, config, undefined) {
 
-    var NODEJS = (typeof module !== 'undefined' && module.require),
-        qb = {};
-
-/*. // ns
-    if (ns) {
--.*/
-    if (NODEJS) {
-        var DEFAULT_PARENT = module.parent ? module.parent.exports : module.exports;
-    } else {
-        DEFAULT_PARENT = window;
-    }
-
+    var qb = {};
+    config = config || {};
+    
     /**
      * Namespace - функция для создания областей видимости
      * @param {String} path  Строка вида "ns.ns1.ns2"
-     * @param {Object} [parent=<module.parent.exports> or <module.exports> or <window>]  Объект, в котором будут создаваться области видимости.
+     * @param {Object} [parent=window]  Объект, в котором будут создаваться области видимости.
      * @param {Object} [finalObj={}]  Объект, который будет записан на место последней области видимости.
      */
     function ns(path, parent, finalObj) {
         var parts = path.split('.'),
-            ns = parent || DEFAULT_PARENT;
+            ns = parent || window;
         for (var i = 0, len = parts.length - 1; i < len; i++) {
             var part = parts[i];
             if (part) {
@@ -36,12 +25,13 @@
         } catch(e) {}
         return ns[part];
     }
-/*. } -.*/
+    
+    qb.ns = ns;
 
     /*----------   Основные утилиты   ----------*/
 
     /**
-     * Декоратор, который первый аргумент сгенеренный функции превращает в this декорируемой.
+     * Декоратор, который контекст this декорируемой функции превращает в первый аргумент сгенеренной.
      * Пример: var slice = Array.prototype.slice.thisToArg();
      *         slice([1, 2, 3], 1, 2) эквивалентно Array.prototype.slice.call([1, 2, 3], 1, 2)
      */
@@ -85,24 +75,22 @@
     var _toString = Object.prototype.toString,
         toString = _toString.thisToArg();
 
-/*. if (!options.nodejs) { -.*/
     // Метод для преобразования относительного урла в абсолютный
     // Проверка, работает ли преобразование урла в абсолютный через установку href у ссылки (не работает в IE<8)
-    var LINK = document.createElement('a');
-    LINK.href = 'a';
-    if (LINK.href === 'a') {
-        var DIV = document.createElement('div'),
+    var link = document.createElement('a');
+    link.href = 'a';
+    if (link.href === 'a') {
+        var div = document.createElement('div'),
             toAbsoluteUrl = function(url) {
-                DIV.innerHTML = '<a href="' + url.escapeHtml() + '"></a>';
-                return DIV.firstChild.href;
+                div.innerHTML = '<a href="' + url.escapeHtml() + '"></a>';
+                return div.firstChild.href;
             };
     } else {
         toAbsoluteUrl = function(url) {
-            LINK.href = url;
-            return LINK.href;
+            link.href = url;
+            return link.href;
         }
     }
-/*. } -.*/
 
     /*----------   Расширение Function   ----------*/
     merge(Function, {
@@ -204,58 +192,6 @@
             }
             return values;
         },
-/*. // Object_dump(String_repeat)
-    if (Object_dump) {
--.*/
-        /**
-         * Преобразует объект в строку. Обходятся только собственные атрибуты объекта.
-         * @param obj  Преобразуемый объект любого типа.
-         * @param {Number|Boolean} [depth=1]  Глубина преобразования объекта, т.е. на сколько уровней функция будет
-         *                                    "погружаться" в объект, если его атрибутами являются другие объекты.
-         *                                    Если true, то берется максимальное значение (Object.QB_MAX_DUMP_DEPTH).
-         * @param {Number|String} [indent=0]  По-умолчанию объект преобразуется в одну строку.
-         *                                    Если указана строка, то результат будет многострочным и она будет использована
-         *                                    в качестве отступа для каждого нового уровня вложенности объекта.
-         *                                    Если указано число, то отспупом будет указанное кол-во пробелов.
-         */
-        QB_MAX_DUMP_DEPTH: 10,
-        dump: function(obj, depth, indent, _shift) {
-            indent = (indent > 0) ? ' '.repeat(indent) : indent || '';
-            _shift = _shift || '';
-            if (depth === true) {
-                depth = Object.QB_MAX_DUMP_DEPTH;
-            } else if (!depth && depth !== 0) {
-                depth = 1;
-            }
-            if (depth && (Object.is(obj) || Array.is(obj)) && !(obj instanceof RegExp)) {
-                var isArr = Array.is(obj),
-                    tail = (indent ? '\n' : ''),
-                    space = (indent ? ' ' : ''),
-                    fullIndent = _shift + indent,
-                    str = '';
-                each(obj, function(val, key) {
-                    str += (str ? ',' : '') + tail + fullIndent + (isArr ? '{val}' : '{key}:{val}').format({
-                        key: key,
-                        val: space + Object.dump(val, depth-1, indent, fullIndent)
-                    });
-                }, true);
-                str = (isArr ? '[]' : '{}').insert(1, (str ? str + tail + _shift : '' ));
-            } else {
-                if (typeof obj === 'string') {
-                    str = '"' + obj + '"';
-                } else if (Array.is(obj)) {
-                    str = '[' + obj + ']';
-                } else if (Function.is(obj)) {
-                    str = '{function}';
-                } else if (obj && obj.toString === _toString) {
-                    str = '{...}';
-                } else {
-                    str = '' + obj;
-                }
-            }
-            return str;
-        },
-/*. } -.*/
         /**
          * Делает новый объект на основе указанного.
          * @param {Object|Array} obj  Итерируемый объект, из которого нужно создать новый объект.
@@ -281,6 +217,56 @@
         }
     }, false, true);
     Object.is = Object.isObject;
+    
+    Object.QB_MAX_DUMP_DEPTH = 10;
+    
+    /**
+     * Преобразует объект в строку. Обходятся только собственные атрибуты объекта.
+     * @param obj  Преобразуемый объект любого типа.
+     * @param {Number|Boolean} [depth=1]  Глубина преобразования объекта, т.е. на сколько уровней функция будет
+     *   "погружаться" в объект, если его атрибутами являются другие объекты.
+     *   Если true, то берется максимальное значение (Object.QB_MAX_DUMP_DEPTH).
+     * @param {Number|String} [indent=0]  По-умолчанию объект преобразуется в одну строку.
+     *   Если указана строка, то результат будет многострочным и она будет использована
+     *   в качестве отступа для каждого нового уровня вложенности объекта.
+     *   Если указано число, то отспупом будет указанное кол-во пробелов.
+     */
+    Object.dump = function (obj, depth, indent, _shift) {
+        indent = (indent > 0) ? ' '.repeat(indent) : indent || '';
+        _shift = _shift || '';
+        if (depth === true) {
+            depth = Object.QB_MAX_DUMP_DEPTH;
+        } else if (!depth && depth !== 0) {
+            depth = 1;
+        }
+        if (depth && (Object.is(obj) || Array.is(obj)) && !(obj instanceof RegExp)) {
+            var isArr = Array.is(obj),
+                tail = (indent ? '\n' : ''),
+                space = (indent ? ' ' : ''),
+                fullIndent = _shift + indent,
+                str = '';
+            each(obj, function (val, key) {
+                str += (str ? ',' : '') + tail + fullIndent + (isArr ? '{val}' : '{key}:{val}').format({
+                    key: key,
+                    val: space + Object.dump(val, depth - 1, indent, fullIndent)
+                });
+            }, true);
+            str = (isArr ? '[]' : '{}').insert(1, (str ? str + tail + _shift : '' ));
+        } else {
+            if (typeof obj === 'string') {
+                str = '"' + obj + '"';
+            } else if (Array.is(obj)) {
+                str = '[' + obj + ']';
+            } else if (Function.is(obj)) {
+                str = '{function}';
+            } else if (obj && obj.toString === _toString) {
+                str = '{...}';
+            } else {
+                str = '' + obj;
+            }
+        }
+        return str;
+    };
 
     /*----------   Расширение Array   ----------*/
     merge(Array, {
@@ -466,23 +452,6 @@
             ind = (ind < 0) ? Math.max(0, this.length + ind + 1) : ind;
             return this.substr(0, ind) + str + this.substr(ind);
         },
-/*. // String_repeat
-    if (String_repeat) {
--.*/
-        /**
-         * Повторяет строку несколько раз.
-         * @param {Number} times  Сколько раз повторить строку.
-         * @param {String} [separator='']  Строка-разделитель между повторениями.
-         */
-        repeat: function(times, separator) {
-            separator = separator || '';
-            var res = [];
-            for (var i = 0; i < times; i++) {
-                res.push(this);
-            }
-            return res.join(separator);
-        },
-/*. } -.*/
         format: function(replaceObj) {
             return this.replace(reFormatReplace, function(fullExpr, expr) {
                 if (expr) {
@@ -510,11 +479,9 @@
                 return HTML_ESCAPE_MAP[ch];
             });
         },
-/*. if (!options.nodejs) { -.*/
         toAbsoluteUrl: function() {
             return toAbsoluteUrl(this);
         },
-/*. } -.*/
         /**
          * Преобразует строку в примитивы
          * ('null' -> null; 'true' -> true и т.д.)
@@ -536,21 +503,31 @@
             return result;
         }
     }, false, true);
-
-/*. // Date
-    if (Date) {
--.*/
+    
+    /**
+     * Повторяет строку несколько раз.
+     * @param {Number} times  Сколько раз повторить строку.
+     * @param {String} [separator='']  Строка-разделитель между повторениями.
+     */
+    String.prototype.repeat = function (times, separator) {
+        separator = separator || '';
+        var res = [];
+        for (var i = 0; i < times; i++) {
+            res.push(this);
+        }
+        return res.join(separator);
+    };
+    
     /*----------   Расширение Date   ----------*/
     merge(Date, {
-        now: function() {
+        now: function () {
             return +new Date();
         },
-        isDate: function(obj) {
+        isDate: function (obj) {
             return (toString(obj) === '[object Date]');
         }
     }, false, true);
     Date.is = Date.isDate;
-/*. } -.*/
 
     /*----------   Расширение Number   ----------*/
     merge(Number, {
@@ -597,36 +574,33 @@
         }
     }
 
-/*. // Class
-    if (Class) {
--.*/
     /*----------   Реализация Class   ----------*/
     function Empty() {}
-
+    
     function Class(info) {
         var Name = info.Name,
             Extends = info.Extends,
             Implements = Array.from(info.Implements),
             Static = info.Static,
             init = info.init;
-
-        var constructor = function() {
+    
+        var constructor = function () {
             var self = this;
             // Вызов конструкторов примесей (для добавления необходимых атрибутов создаваемому объекту)
             // Вызываем даже в вызове конструктора примесей, т.е. если примесь имплементит другую примесь,
             // будет вызван конструктор этой другой примеси TODO: 1) правильно ли? (связано с 2)
             //if( self instanceof constructor ) {
-            Implements.forEach(function(Mixin) {
+            Implements.forEach(function (Mixin) {
                 Mixin.call(this);
             }, self);
             //}
-
+    
             // Вызов собственного конструктора
             if (init) {
                 return init.apply(self, arguments);
             }
         };
-
+    
         // Статичные атрибуты
         if (Static) {
             merge(constructor, Static, true);
@@ -638,7 +612,7 @@
         }
         var proto = constructor.fn = constructor.prototype;
         // Примеси
-        Implements.forEach(function(Mixin) {
+        Implements.forEach(function (Mixin) {
             // Мержим всю ветку прототипов, а не конкретный прототип примеси TODO: 2) правильно ли?
             merge(this, Mixin.prototype, false/*true*/, true);
         }, proto);
@@ -649,19 +623,16 @@
         delete info.Static;
         merge(proto, info, true);
         proto.constructor = constructor;
-
+    
         // Название класса
         if (Name) {
             constructor.toString = Function.from(Name);
         }
-
+    
         return constructor;
     }
-/*. } -.*/
-
-/*. // Events(Class)
-    if (Events) {
--.*/
+    
+    qb.Class = Class;
     /*----------   Реализация Events   ----------*/
     function getEventInfo(name) {
         var info = name.split('.', 2);
@@ -670,14 +641,14 @@
             name: info[0]
         }
     }
-
+    
     var Events = new Class({
         Name: 'Events',
-
+    
         /**
          * @param {Object} [events=null]  Объект с событиями, которые будут добавлены при создании Events-объекта
          */
-        init: function(events) {
+        init: function (events) {
             this.$events = this.$events || {};
             if (events) {
                 this.addEvents(events);
@@ -694,7 +665,7 @@
          * @param {Function} handler  Обработчик (слушатель) события.
          * @param {Boolean} [triggerOnce=false]  Вызвать данный обработчик только один раз (затем удалить).
          */
-        addEvents: function(name, handler, triggerOnce) {
+        addEvents: function (name, handler, triggerOnce) {
             if (typeof name === 'string') {
                 var eventsObj = {};
                 eventsObj[name] = handler;
@@ -705,7 +676,7 @@
             triggerOnce = !!triggerOnce;
             if (eventsObj) {
                 var events = this.$events;
-                each(eventsObj, function(handler, name) {
+                each(eventsObj, function (handler, name) {
                     var info = getEventInfo(name),
                         ns = info.ns;
                     name = info.name;
@@ -725,14 +696,14 @@
          * @param {String} name  Имя или паттерн (см. описание), указывающий на обработчики, которые нужно удалить.
          * @param {Function} [handler]  Обработчик, который нужно удалить.
          */
-        removeEvents: function(name, handler) {
+        removeEvents: function (name, handler) {
             var info = getEventInfo(name),
                 ns = info.ns,
                 events = this.$events;
             name = info.name;
             // Если указано 'click', то удаляем обработчики на событие 'click' из всех ns
             if (ns === 'default' && !handler) {
-                each(events, function(ns) {
+                each(events, function (ns) {
                     delete ns[name];
                 });
                 // Если указано '.someNS', то удаляем данный ns
@@ -763,10 +734,10 @@
          * @param {Array} [args=[]]  Аргументы, с которыми будет вызван каждый обработчик.
          * @apram [thisObj=self]  Объект, который станет this в обработчиках.
          */
-        triggerEvent: function(name, args, thisObj) {
+        triggerEvent: function (name, args, thisObj) {
             args = args || [];
             thisObj = (arguments.length > 2) ? arguments[2] : this;
-            each(this.$events, function(ns) {
+            each(this.$events, function (ns) {
                 var handlers = ns[name];
                 if (handlers && handlers.length) {
                     for (var i = 0, len = handlers.length; i < len; i++) {
@@ -781,7 +752,7 @@
             });
         }
     });
-
+    
     var signals = new Events(),
         p = Events.prototype;
     merge(signals, {
@@ -789,20 +760,18 @@
         remove: p.removeEvents,
         send: p.triggerEvent
     });
-/*. } -.*/
-
-/*. // Deferred(Class)
-    if (Deferred) {
--.*/
+    
+    qb.Events = Events;
+    qb.signals = signals;
     /*----------   Реализация Deferred   ----------*/
     var DEFERRED_STATUS = {
         UNRESOLVED: 0,
         RESOLVED: 1,
         REJECTED: 2
     };
-
+    
     function makeCallbackMethod(prop, callStatus) {
-        return function(callbacks) {
+        return function (callbacks) {
             var status = this.$status;
             if (this.isUnresolved()) {
                 this[prop].append(Array.from(callbacks));
@@ -812,9 +781,9 @@
             return this;
         }
     }
-
+    
     function makeResolveMethod(prop, resolveStatus) {
-        return function(/*args*/) {
+        return function (/*args*/) {
             if (this.isUnresolved()) {
                 this.$status = resolveStatus;
                 this.$args = Array.slice(arguments);
@@ -826,34 +795,34 @@
             return this;
         }
     }
-
+    
     function makeResolveWithMethod(method) {
-        return function(thisObj/*, args*/) {
+        return function (thisObj/*, args*/) {
             if (this.isUnresolved()) {
                 this.$with = thisObj;
                 return this[method].apply(this, Array.slice(arguments, 1));
             }
         }
     }
-
+    
     var Deferred = new Class({
         Name: 'Deferred',
         Static: merge({
-            when: function(/*deferreds*/) {
+            when: function (/*deferreds*/) {
                 var result = new Deferred(),
                     defs = Array.slice(arguments),
                     unresolved = defs.length,
                     args = [];
-
+    
                 function fail() {
                     var args = Array.slice(arguments);
                     args.unshift(this);
                     result.reject.apply(result, args);
                 }
-
-                defs.forEach(function(def, i) {
+    
+                defs.forEach(function (def, i) {
                     if (def instanceof Deferred) {
-                        def.done(function() {
+                        def.done(function () {
                             args[i] = Array.slice(arguments);
                             if (!--unresolved) {
                                 result.resolve.apply(result, args);
@@ -871,8 +840,8 @@
                 return result;
             }
         }, DEFERRED_STATUS),
-
-        init: function() {
+    
+        init: function () {
             this.$done = [];
             this.$fail = [];
             this.$always = [];
@@ -880,16 +849,16 @@
             this.$with = this;
             this.$args = null;
         },
-        _callDeferredCallbacks: function(callbacks) {
+        _callDeferredCallbacks: function (callbacks) {
             var thisObj = this.$with,
                 args = this.$args;
-            Array.from(callbacks).forEach(function(callback) {
+            Array.from(callbacks).forEach(function (callback) {
                 callback.apply(thisObj, args);
             });
         },
         done: makeCallbackMethod('$done', DEFERRED_STATUS.RESOLVED),
         fail: makeCallbackMethod('$fail', DEFERRED_STATUS.REJECTED),
-        then: function(doneCallbacks, failCallbacks) {
+        then: function (doneCallbacks, failCallbacks) {
             return this.done(doneCallbacks).fail(failCallbacks);
         },
         always: makeCallbackMethod('$always', true),
@@ -897,11 +866,11 @@
         resolveWith: makeResolveWithMethod('resolve'),
         reject: makeResolveMethod('$fail', DEFERRED_STATUS.REJECTED),
         rejectWith: makeResolveWithMethod('reject'),
-        pipe: function(doneFilter, failFilter) {
+        pipe: function (doneFilter, failFilter) {
             var result = new Deferred();
-            [doneFilter, failFilter].forEach(function(filter, i) {
+            [doneFilter, failFilter].forEach(function (filter, i) {
                 if (Function.is(filter)) {
-                    this[i ? 'fail' : 'done'](function() {
+                    this[i ? 'fail' : 'done'](function () {
                         var args = Array.from(filter.apply(this, arguments));
                         args.unshift(this);
                         result[(i ? 'reject' : 'resolve') + 'With'].apply(result, args);
@@ -911,24 +880,22 @@
             return result;
         }
     });
-
+    
     // Делаем методы isResolved, isRejected и isUnresolved
-    each(DEFERRED_STATUS, function(statusVal, statusName) {
-        this['is' + statusName.toLowerCase().capitalize()] = function() {
+    each(DEFERRED_STATUS, function (statusVal, statusName) {
+        this['is' + statusName.toLowerCase().capitalize()] = function () {
             return this.$status === statusVal;
         }
     }.bind(Deferred.prototype));
-/*. } -.*/
-
-/*. // ready(Deferred)
-    if (ready) {
--.*/
+    
+    qb.Deferred = Deferred;
+    qb.when = Deferred.when;
     /*----------   Реализация deferred-а DOMReady (аналог $(document).ready) ----------*/
     var DOMReady = new Deferred(),
         windowLoad = new Deferred(),
         ready = DOMReady.resolve.bind(DOMReady),
         winLoaded = windowLoad.resolve.bind(windowLoad);
-
+    
     if (document.readyState === 'complete') {
         ready();
         winLoaded();
@@ -936,7 +903,7 @@
         document.addEventListener('DOMContentLoaded', ready, false);
         window.addEventListener('load', winLoaded, false);
     } else if (document.attachEvent) {
-        var loaded = function() {
+        var loaded = function () {
             if (document.readyState === 'complete') {
                 ready();
             }
@@ -947,9 +914,9 @@
         try {
             var toplevel = (window.frameElement == null);
         } catch(e) {}
-
+    
         if (toplevel && document.documentElement.doScroll) {
-            (function() {
+            (function () {
                 try {
                     document.documentElement.doScroll('left');
                 } catch(e) {
@@ -960,12 +927,9 @@
             })();
         }
     }
-/*. } -.*/
-
-/*. // Loader(Object_dump,ns,Class,Events,Deferred,ready)
-    if (Loader) {
--.*/
-
+    
+    qb.ready = DOMReady.done.bind(DOMReady);
+    qb.load = windowLoad.done.bind(windowLoad);
     /*   *** Загрузчик ресурсов ***
      *
      *    qb.js - модульная библиотека, т.е. для ее использования на страницу достаточно поместить только скрипт "core.js",
@@ -1068,31 +1032,31 @@
      *    Также есть возможность в строке экспорта указать ТОЛЬКО флаги. Тогда она будет выглядеть так:
      *      '{ready}'
      */
-
+    
     var HEAD_ELEM = document.getElementsByTagName('head')[0];
-
+    
     var Shortcuts = new Class({
         Name: 'Shortcuts',
         Static: {
             MAX_DEPTH: 50
         },
-
-        init: function(edgeChars) {
+    
+        init: function (edgeChars) {
             this.shortcuts = {};
             this.edgeChars = edgeChars.escapeRegexp();
             // Служит для отслеживания бесконечной рекурсии
             this.stack = [];
         },
-        add: function(shortcuts) {
+        add: function (shortcuts) {
             var currentShortcuts = this.shortcuts;
-            each(shortcuts, function(value, shortcut) {
+            each(shortcuts, function (value, shortcut) {
                 currentShortcuts[shortcut] = value;
             });
             this._generateRegexp();
         },
-        _generateRegexp: function() {
+        _generateRegexp: function () {
             var shortcuts = Object.keys(this.shortcuts).map(
-                function(shortcut) {
+                function (shortcut) {
                     return shortcut.escapeRegexp();
                 }).join('|');
             if (shortcuts) {
@@ -1103,7 +1067,7 @@
             }
             this.regexp = regexp ? new RegExp(regexp, 'g') : null;
         },
-        replaceIn: function(str) {
+        replaceIn: function (str) {
             var self = this,
                 shortcuts = this.shortcuts,
                 result = str,
@@ -1111,11 +1075,11 @@
             if (this.regexp) {
                 if (stack.length > Shortcuts.MAX_DEPTH) {
                     var err = new Error('Endless recursion during shortcuts replacing.\n' +
-                                        Object.dump(this, true, 4));
+                        Object.dump(this, true, 4));
                     err.name = 'qb-sc-recursion';
                     throw err;
                 }
-                result = str.replace(this.regexp, function(_, left, shortcut) {
+                result = str.replace(this.regexp, function (_, left, shortcut) {
                     stack.push(str + ': ' + shortcut);
                     return left + self.replaceIn(shortcuts[shortcut]);
                 });
@@ -1124,7 +1088,7 @@
             return result;
         }
     });
-
+    
     /**
      * Объект, рассылающий события прогресса загрузки ресурсов.
      * Можно использовать для отображение прогресс-бара.
@@ -1138,12 +1102,12 @@
     var progress = {
         loaded: 0,
         total: 0,
-        started: function() {
+        started: function () {
             if (!this.total++) {
                 signals.send('loader-start');
             }
         },
-        finished: function() {
+        finished: function () {
             this.loaded++;
             signals.send('loader-step', [this.loaded, this.total]);
             if (this.loaded >= this.total) {
@@ -1152,53 +1116,60 @@
             }
         }
     };
-
+    
     var LOAD_STATUS = {
         UNLOADED: 0,
         LOADING: 1,
         LOADED: 2,
         LOAD_ERROR: 3
     };
-
+    
     var LoadingElement = new Class({
         Name: 'LoadingElement',
         Extends: Deferred,
         Static: {
             STATUS: LOAD_STATUS
         },
-
-        init: function(url) {
+    
+        init: function (url) {
             Deferred.call(this);
             this.url = url;
             this.elem = null;
             this.status = LOAD_STATUS.UNLOADED;
         },
-        load: function() {
+        load: function () {
             if (this.status === LOAD_STATUS.UNLOADED) {
                 this.status = LOAD_STATUS.LOADING;
                 progress.started();
                 this._createElem();
             }
         },
-        destroy: function() {
+        loadFrom: function (elem) {
+            this.elem = elem;
+            this.status = LOAD_STATUS.LOADED;
+            Deferred.fn.resolve.call(this, this);
+        },
+        destroy: function () {
             this._removeElem();
         },
         // Этот метод должен быть перезагружен. Здесь должен создаваться DOM-элемент.
         _createElem: pass,
         // Этот метод должен быть перезагружен. Здесь должен удаляться DOM-элемент.
         _removeElem: pass,
-        resolve: function() {
+        resolve: function () {
+            if (this.status === LOAD_STATUS.LOADING) {
+                progress.finished();
+            }
             this.status = LOAD_STATUS.LOADED;
-            progress.finished();
             Deferred.fn.resolve.call(this, this);
         },
-        reject: function() {
+        reject: function () {
             this.status = LOAD_STATUS.LOAD_ERROR;
             progress.finished();
             Deferred.fn.reject.apply(this, arguments);
         }
     });
-
+    
     var Stylesheet = new Class({
         Name: 'Stylesheet',
         Extends: LoadingElement,
@@ -1214,12 +1185,12 @@
                 return resources;
             }
         },
-
-        init: function(url) {
+    
+        init: function (url) {
             LoadingElement.call(this, url);
             this.img = null;
         },
-        _createElem: function() {
+        _createElem: function () {
             // BUGFIX: Для браузеров, которые не поддерживают onload на <link/>, используем метод с картинкой
             // (http://stackoverflow.com/questions/2635814/javascript-capturing-load-event-on-link/5371426#5371426)
             var link = this.elem = document.createElement('link'),
@@ -1234,7 +1205,7 @@
             img.src = url;
             HEAD_ELEM.appendChild(link);
         },
-        resolve: function() {
+        resolve: function () {
             var link = this.elem,
                 img = this.img;
             link.onload = img.onerror = null;
@@ -1243,7 +1214,7 @@
             img.parentNode.removeChild(img);
             LoadingElement.fn.resolve.call(this);
         },
-        toString: function() {
+        toString: function () {
             return 'Stylesheet [{}]'.format(this.url);
         }
     });
@@ -1263,36 +1234,36 @@
                 return resources;
             }
         },
-
-        init: function(url) {
+    
+        init: function (url) {
             LoadingElement.call(this, url);
         },
-        _createElem: function() {
+        _createElem: function () {
             var script = this.elem = document.createElement('script');
             this._bindLoadHandler();
             script.src = this.url;
             HEAD_ELEM.appendChild(script);
         },
-        _removeElem: function() {
+        _removeElem: function () {
             HEAD_ELEM.removeChild(this.elem);
         },
-        resolve: function() {
+        resolve: function () {
             var elem = this.elem;
             elem.onreadystatechange = elem.onload = elem.onerror = null;
             LoadingElement.fn.resolve.call(this);
         },
-        reject: function(message, file, line) {
+        reject: function (message, file, line) {
             var errorMsg = (typeof message === 'string') ? 'Error in line {1}: "{0}"'.format([message, line]) : '<no info>';
             LoadingElement.fn.reject.call(this, errorMsg);
         },
-        deferLoad: function() {
+        deferLoad: function () {
             var elem = this.elem;
             elem.onreadystatechange = elem.onload = null;
         },
-        _bindLoadHandler: function() {
+        _bindLoadHandler: function () {
             var elem = this.elem,
                 loaded = this.resolve.bind(this);
-            elem.onreadystatechange = function() {
+            elem.onreadystatechange = function () {
                 if (this.readyState == 'loaded' || this.readyState == 'complete') {
                     loaded();
                 }
@@ -1300,11 +1271,11 @@
             elem.onload = loaded;
             elem.onerror = this.reject.bind(this);
         },
-        toString: function() {
+        toString: function () {
             return 'Script [{}]'.format(this.url);
         }
     });
-
+    
     /**
      * Удаляет все пробельные символы
      * @param {String} query  Строка запроса
@@ -1313,7 +1284,7 @@
     function removeWhitespaces(query) {
         return query.replace(/\s+/g, '');
     }
-
+    
     /**
      * Разделяет строку запроса на части и удаляет из них пустые
      * @param {String} query  Строка запроса
@@ -1322,7 +1293,7 @@
     function splitQuery(query, splitter) {
         return query.split(splitter).clean();
     }
-
+    
     /**
      * Преобразует часть запроса вида "qb/classes:Sync,Events" в массив ["qb/classes/Sync", "qb/classes/Events"]
      * @param {String} part  Часть запроса
@@ -1333,18 +1304,18 @@
         var chunks = part.split(':', 2),
             base = (chunks.length > 1) ? chunks[0] + joiner : null,
             childs = (chunks[1] || chunks[0]).split(',');
-        return base ? childs.map(function(child) {
+        return base ? childs.map(function (child) {
             return base + child;
         }) : childs;
     }
-
+    
     var Handler = new Class({
         Name: 'Handler',
         Extends: Deferred,
-
-        init: function(loader, resources, exports) {
+    
+        init: function (loader, resources, exports) {
             Deferred.call(this);
-
+    
             this.resources = resources;
             this.loader = loader;
             this.args = exports ? exports.args : null;
@@ -1354,10 +1325,10 @@
                 this._handleLoadError.bind(this)
             );
         },
-        load: function() {
+        load: function () {
             this.resources.forEachCall('load');
         },
-        _handleLoad: function() {
+        _handleLoad: function () {
             var flags = this.options,
                 parseArgs = this._parseArgs.bind(this);
             if (flags.ready || flags.load) {
@@ -1367,30 +1338,30 @@
                 parseArgs();
             }
         },
-        _parseArgs: function() {
+        _parseArgs: function () {
             var args = this.args,
                 exports = [];
             if (args) {
                 // Заменяем шорткаты
                 args = removeWhitespaces(this.loader.exportShortcuts.replaceIn(args));
-                splitQuery(args, ';').forEach(function(part) {
-                    splitPart(part, '.').forEach(function(_export) {
+                splitQuery(args, ';').forEach(function (part) {
+                    splitPart(part, '.').forEach(function (_export) {
                         this.push(ns(_export));
                     }, exports);
                 });
             }
             this.resolve.apply(this, exports);
         },
-        _handleLoadError: function(resource, error) {
+        _handleLoadError: function (resource, error) {
             this.reject(resource, error);
             throw 'Failed to load resource "{0}"\nError info: "{1}"'.format(arguments);
         }
     });
-
+    
     var PARTS_PRIORITY = /^!|^\{(\d+)}/i,
         EXPORTS_FLAGS = /(?:^|\|)\{([\w,]+)\}$/i,
         FULL_URL = /^(https?:\/\/|\/)/i;
-
+    
     var Loader = new Class({
         Name: 'Loader',
         Static: {
@@ -1407,8 +1378,7 @@
                             each(Class.getResourcesFromPage(), function (elem, url) {
                                 if (!resources[url]) {
                                     var resource = resources[url] = new Class(url);
-                                    resource.elem = elem;
-                                    resource.resolve();
+                                    resource.loadFrom(elem);
                                 }
                             });
                         }
@@ -1420,8 +1390,8 @@
                 this.resourceTypes.append(Classes);
             }
         },
-
-        init: function(rootUrl) {
+    
+        init: function (rootUrl) {
             this.rootUrl = toAbsoluteUrl(rootUrl);
             this.queryShortcuts = new Shortcuts(',.:;/!} ');
             this.exportShortcuts = new Shortcuts(',.:; ');
@@ -1445,7 +1415,7 @@
          * @param {String} [module]  Название текущего модуля.
          *                           Используется в модулях, которые зависят от других ресурсов.
          */
-        require: function(query, exports, callback, module) {
+        require: function (query, exports, callback, module) {
             var self = this,
                 resources = Loader.getResources(true),
                 ready = Loader.ready,
@@ -1469,28 +1439,28 @@
             }
             if (ready.isUnresolved()) {
                 Loader.requires++;
-                callbacks.push(function() {
+                callbacks.push(function () {
                     if (--Loader.requires === 0) {
                         ready.resolve();
                     }
                 });
             }
             var urls = this._parseQuery(query),
-                handlers = urls.map(function(part) {
+                handlers = urls.map(function (part) {
                     var _exports = ( part === this.last() ) ? self._parseExports(exports) : null;
                     return self._getLoadHandler(part, _exports);
                 }, urls);
-            handlers.forEach(function(handler, i) {
+            handlers.forEach(function (handler, i) {
                 var next = this[i + 1];
-                handler.done(next ? function() { next.load() } : callbacks);
+                handler.done(next ? function () { next.load() } : callbacks);
             }, handlers);
             handlers[0].load();
             return handlers.last();
         },
-        _getLoadHandler: function(urls, exports) {
+        _getLoadHandler: function (urls, exports) {
             var resources = Loader.getResources(),
                 isReload = exports ? exports.flags.reload : false,
-                required = urls.map(function(url) {
+                required = urls.map(function (url) {
                     var resource = resources[url],
                         isCSS = this._isStylesheet(url);
                     if (isReload && !isCSS && resource && resource.status === LOAD_STATUS.LOADED) {
@@ -1501,10 +1471,10 @@
                 }, this);
             return new Handler(this, required, exports);
         },
-        _parseQuery: function(query, _subcall) {
+        _parseQuery: function (query, _subcall) {
             var parts = (typeof query === 'string') ? splitQuery(query, '; ') : query,
                 urls = {};
-            parts.forEach(function(part) {
+            parts.forEach(function (part) {
                 if (part) {
                     part = part.trim();
                     var priorityInfo = this._parsePriority(part),
@@ -1521,10 +1491,10 @@
             }, this);
             return _subcall ? urls : this._prioritizeUrls(urls);
         },
-        _parsePart: function(part) {
+        _parsePart: function (part) {
             var chunks = splitPart(removeWhitespaces(part), '/'),
                 urls = {};
-            chunks.forEach(function(chunk) {
+            chunks.forEach(function (chunk) {
                 var info = this._parsePriority(chunk),
                     part = info.part,
                     url = this._isStylesheet(part) ? toAbsoluteUrl(part) : this._normalizeScriptUrl(part);
@@ -1532,9 +1502,9 @@
             }, this);
             return urls;
         },
-        _parsePriority: function(part) {
+        _parsePriority: function (part) {
             var priority = null;
-            part = part.replace(PARTS_PRIORITY, function(_, num) {
+            part = part.replace(PARTS_PRIORITY, function (_, num) {
                 priority = +num || 1;
                 return '';
             });
@@ -1543,10 +1513,10 @@
                 priority: priority
             }
         },
-        _parseExports: function(exports) {
+        _parseExports: function (exports) {
             if (exports) {
                 var flags,
-                    args = removeWhitespaces(exports).replace(EXPORTS_FLAGS, function(_, _flags) {
+                    args = removeWhitespaces(exports).replace(EXPORTS_FLAGS, function (_, _flags) {
                         flags = _flags.split(',').toObject();
                         return '';
                     });
@@ -1567,7 +1537,7 @@
          *                             Иначе возвращается исходный необработанный парт.
          * @return {Boolean} info.isUrl  Флаг, определился ли парт как урл или нет
          */
-        _getPartInfo: function(part) {
+        _getPartInfo: function (part) {
             var info = {};
             if (part.startsWith('www.')) {
                 info.part = 'http://' + part;
@@ -1577,15 +1547,15 @@
             info.part = isUrl ? toAbsoluteUrl(part) : part;
             return info;
         },
-        _normalizeScriptUrl: function(url) {
+        _normalizeScriptUrl: function (url) {
             return this.rootUrl + url + '.js';
         },
-        _isStylesheet: function(url) {
+        _isStylesheet: function (url) {
             return /\.css$/i.test(url);
         },
-        _prioritizeUrls: function(urls) {
+        _prioritizeUrls: function (urls) {
             var result = [];
-            each(urls, function(priority, url) {
+            each(urls, function (priority, url) {
                 priority = priority || 0;
                 var urls = result[priority] = result[priority] || [];
                 urls.push(url);
@@ -1597,19 +1567,21 @@
     
     // Регистрируем типы ресурсов
     Loader.registerResourceTypes([Script, Stylesheet]);
-
+    
     // Определяем директорию со скриптами
-    var scripts = document.getElementsByTagName('script'),
-        rootRegEx = /(.*?)qb\/core\.js$/,
-        rootJS;
-    for (var i = 0, len = scripts.length; i < len; i++) {
-        if (rootJS = rootRegEx.exec(scripts[i].src)) {
-            rootJS = rootJS[1];
-            break;
+    var rootJS = config.root;
+    if (!rootJS) {
+        var scripts = document.getElementsByTagName('script'),
+            rootRegEx = /(.*?)qb\/core\.js$/;
+        for (var i = 0, len = scripts.length; i < len; i++) {
+            if (rootJS = rootRegEx.exec(scripts[i].src)) {
+                rootJS = rootJS[1];
+                break;
+            }
         }
+        rootJS = rootJS || '/static/js/';
     }
-    rootJS = rootJS || '/static/js/';
-
+    
     var loader = new Loader(rootJS);
     loader.queryShortcuts.add({
         'jQuery': 'libs/jquery',
@@ -1622,60 +1594,36 @@
         'doc': 'document',
         'def': 'qb; document; window'
     });
-/*. } -.*/
-
-    /*----------   Замена основного объекта   ----------*/
-/*. if (Loader) { -.*/
-    qb = function(handler) {
-        Loader.ready.done(handler);
-    };
-/*. } -.*/
+    
+    /*----------   Замена основного объекта на функцию   ----------*/
+    qb = (function (oldQB) {
+        
+        var newQB = function (handler) {
+            Loader.ready.done(handler);
+        };
+        
+        return merge(newQB, oldQB);
+        
+    }(qb));
+    
+    merge(qb, {
+        Loader: Loader,
+        loader: loader,
+        Shortcuts: Shortcuts,
+        require: loader.require.bind(loader)
+    });
 
     merge(qb, {
         // Утилиты
-        merge: merge
-      , each: each
-      , pass: pass
-/*. if (ns) { -.*/
-      , ns: ns
-/*. } -.*/
-/*. if (Events) { -.*/
-      , signals: signals
-/*. } -.*/
-/*. if (ready) { -.*/
-      , ready: DOMReady.done.bind(DOMReady)
-      , load: windowLoad.done.bind(windowLoad)
-/*. } -.*/
-/*. if (Loader) { -.*/
-      , Loader: Loader
-      , Shortcuts: Shortcuts
-      , loader: loader
-      , require: loader.require.bind(loader)
-/*. } -.*/
-/*. if (Class) { -.*/
-      , Class: Class
-/*. } -.*/
-/*. if (Events) { -.*/
-      , Events: Events
-/*. } -.*/
-/*. if (Deferred) { -.*/
-      , Deferred: Deferred
-      , when: Deferred.when
-/*. } -.*/
-/*. if (options.full) { -.*/
+        merge: merge,
+        each: each,
+        pass: pass,
         // Объект Debug-параметров
-      , debug: {}
+        debug: {},
         // Объект конфигурационных параметров
-      , config: {}
-/*. } -.*/
+        config: {}
     });
 
-    if (NODEJS) {
-        module.exports = qb;
-    } else {
-        window.qb = qb;
-    }
+    window.qb = qb;
 
-/*. if (!options.nodejs) { -.*/
-})(window, document, location);
-/*. } -.*/
+})(window, document, location, (typeof qb === 'undefined' ? {} : qb));

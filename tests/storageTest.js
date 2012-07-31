@@ -80,8 +80,8 @@
         if (additionalTest) {
             asyncTest('Reloading qb/storage with cookieStorage forced...', 1, function() {
                 qb.debug.forceCookieStorage = true;
-                qb.require('qb: storage, cookie', 'qb: storage, cookie | {reload}', function(storage, cookie, undefined) {
-                    ok(true, 'Module qb/storage reloaded');
+                qb.require('qb: storage, cookie', 'qb: storage, cookie | {reload}', function(storage, cookie) {
+                    equal(qb.storage.type, 'cookie', 'Module qb/storage reloaded with "cookie" engine');
                     runTests(storage);
                     start();
                 });

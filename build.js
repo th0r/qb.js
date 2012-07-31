@@ -1,16 +1,17 @@
+#! /usr/bin/env node
+
 var fs = require('fs'),
     util = require('util'),
     path = require('path'),
-    ejs = require('ejs'),
     minjs = require('uglify-js'),
     wrench = require('wrench');
 
 // Устанавливаем в качестве рабочей директории папку текущего скрипта
 process.chdir(__dirname);
 
-var PART_REGEXP = /\/\*\.\s\/\/\s(\w+)(?:\(([\w,_]+)\))?/ig,
-    SRC_DIR = path.resolve('./qb'),
-    BUILT_DIR = path.resolve('./build'),
+var INCLUDE_REGEXP = /^([ \t]*)(include\(.+?\);?)\s*?\n?/igm,
+    SRC_DIR = path.resolve('src'),
+    BUILT_DIR = path.resolve('qb'),
     CORE_SRC = 'core.js';
 
 // Получаем список частей исходника и их зависимости
@@ -18,10 +19,15 @@ var parts = {},
     deps = {},
     coreSrc = fs.readFileSync(path.join(SRC_DIR, CORE_SRC), 'utf8'),
     part;
-while(part = PART_REGEXP.exec(coreSrc)) {
-    parts[part[1]] = false;
+
+var include = function (module) {
+    parts[module] = false;
     // Запоминаем зависимости этой части
-    deps[part[1]] = part[2] ? part[2].split(',') : [];
+    deps[module] = Array.prototype.slice.call(arguments, 1);
+};
+
+while(part = INCLUDE_REGEXP.exec(coreSrc)) {
+    eval(part[2]);
 }
 
 var existingParts = Object.keys(parts);
@@ -60,12 +66,6 @@ var args = require('nomnom').options({
         abbr: 'm',
         help: 'Минифицировать ли собранные файлы с помощью "uglify-js".',
         flag: true
-    },
-    nodejs: {
-        abbr: 'n',
-        help: 'Соберется Node.JS модуль. В него будут включены части "Deferred" и "Class", но это можно переопределить с ' +
-              'помощью флага "--core=<part1,part2...partN>".',
-        flag: true
     }
 }).script('node build.js')
     .help('Список частей ядра: ' + existingParts.join(', '))
@@ -77,8 +77,6 @@ if (args.tiny) {
     args.parts = [];
 } else if (corePartsPassed) {
     args.parts = args.core.split(',');
-} else if (args.nodejs) {
-    args.parts = ['ns', 'Class', 'Deferred'];
 } else {
     args.parts = existingParts;
 }
@@ -99,15 +97,26 @@ for (part in parts) {
     (parts[part] ? partsIncluded : partsOmmited).push(part);
 }
 
-// Меняем тэги для EJS-шаблона
-ejs.open = '/*.';
-ejs.close = '.*/';
-parts.options = args;
-// Накладываем шаблон
-var coreOut = ejs.render(coreSrc, parts);
+// Собираем core.js
+include = function (module) {
+    return module;
+};
+
+function getPartSrc(module, whitespaces) {
+    var partPath = path.resolve(SRC_DIR, 'core/core.' + module + '.js');
+
+    return fs.readFileSync(partPath, 'utf8').split('\n').map(function (line) {
+        return whitespaces + line;
+    }).join('\n');
+}
+
+var coreOut = coreSrc.replace(INCLUDE_REGEXP, function (str, whitespaces, includeStr) {
+    var module = eval(includeStr);
+    return parts[module] ? getPartSrc(module, whitespaces) + '\n' : '';
+});
 
 // Создаем директорию для собранных файлов либо чистим ее
-if (path.existsSync(BUILT_DIR)) {
+if (fs.existsSync(BUILT_DIR)) {
     wrench.rmdirSyncRecursive(BUILT_DIR);
 }
 fs.mkdirSync(BUILT_DIR);
@@ -122,7 +131,7 @@ function log(filepath, src, minified) {
     process.stdout.write(info + '\n');
 }
 
-// Пишем ядро
+// Сжимаем и пишем core.js
 if (args.minify) {
     var coreOutMin = minjs(coreOut);
 }
@@ -133,9 +142,10 @@ process.stdout.write(util.format('Части, вошедшие в ядро: %s\n
                                  partsIncluded.join(', ') || 'собралась минимальная версия',
                                  partsOmmited.join(', ') || 'собралась полная версия'));
 
-function writeFile(filePath, outFilePath, minify) {
+// Собираем и сжимаем модули
+function writeFile(filePath, outFilePath) {
     fs.readFile(filePath, 'utf8', function(err, data) {
-        if (minify) {
+        if (args.minify) {
             var compressed = minjs(data);
         }
         fs.writeFile(outFilePath, compressed || data, 'utf8');
@@ -145,22 +155,23 @@ function writeFile(filePath, outFilePath, minify) {
 
 if (!args.core) {
     var except = args.except ? new RegExp(args.except, 'i') : null;
-    process.chdir('qb');
+    process.chdir(SRC_DIR);
     wrench.readdirRecursive('.', function(err, files) {
         if (files) {
             files.forEach(function(file) {
                 fs.stat(file, function(err, info) {
                     if (info.isFile()) {
-                        var filename = path.basename(file);
-                        if (filename === CORE_SRC || (except && except.test(file))) {
+                        var filename = path.basename(file),
+                            dir = path.dirname(file);
+                        if (filename === CORE_SRC || dir === 'core' || (except && except.test(file))) {
                             return false;
                         }
-                        var dir = path.join(BUILT_DIR, path.dirname(file));
-                        if (!path.existsSync(dir)) {
+                        dir = path.join(BUILT_DIR, path.dirname(file));
+                        if (!fs.existsSync(dir)) {
                             fs.mkdirSync(dir);
                         }
                         var outfile = path.join(dir, filename);
-                        writeFile(file, outfile, args.minify);
+                        writeFile(file, outfile);
                     }
                 });
             });
